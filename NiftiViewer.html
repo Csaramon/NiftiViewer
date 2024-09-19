@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NIFTI Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #viewer {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        .view {
+            flex: 1;
+            margin: 5px;
+        }
+        canvas {
+            width: 100%;
+            height: auto;
+            border: 1px solid black;
+        }
+        #controls, #overlayControls, #coordinatePanel, #intensityPanel {
+            margin-top: 20px;
+        }
+        label {
+            margin-right: 10px;
+        }
+        input[type="range"], input[type="number"] {
+            width: 150px;
+        }
+        select {
+            margin-right: 10px;
+        }
+        input[type="number"] {
+            width: 100px;
+        }
+        /* Styles for the coordinate table */
+        #coordinateTable {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        #coordinateTable th, #coordinateTable td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        #coordinateTable th {
+            background-color: #f2f2f2;
+            text-align: center;
+        }
+        #coordinateTable td {
+            text-align: center;
+        }
+        /* Styles for the intensity table */
+        #intensityTable {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        #intensityTable th, #intensityTable td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        #intensityTable th {
+            background-color: #f2f2f2;
+            text-align: center;
+        }
+        #intensityTable td {
+            text-align: center;
+        }
+        /* Styles for the infoPanel */
+        #infoPanel {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        #coordinatePanel, #intensityPanel {
+            flex: 1;
+            margin: 5px;
+        }
+        /* Adjust table width within panels */
+        #coordinatePanel table, #intensityPanel table {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>NIFTI Viewer</h1>
+    <div>
+        <input type="file" id="niftiInput" accept=".nii,.nii.gz">
+        <button id="loadNiftiBtn">Load NIFTI Image</button>
+        <input type="file" id="overlayInput" accept=".nii,.nii.gz">
+        <button id="addOverlayBtn">Add Overlay Image</button>
+        <button id="resetOverlayBtn">Reset Overlays</button>
+    </div>
+    <div id="viewer">
+        <div class="view">
+            <h3>Sagittal View</h3>
+            <canvas id="sagittalView"></canvas>
+        </div>
+        <!-- Swapped the titles and canvas IDs for Coronal and Axial Views -->
+        <div class="view">
+            <h3>Axial View</h3>
+            <canvas id="coronalView"></canvas>
+        </div>
+        <div class="view">
+            <h3>Coronal View</h3>
+            <canvas id="axialView"></canvas>
+        </div>
+    </div>
+    <!-- Container for coordinate and intensity panels -->
+    <div id="infoPanel">
+        <div id="coordinatePanel">
+            <h3>RAS Coordinates</h3>
+            <table id="coordinateTable">
+                <tr>
+                    <th></th>
+                    <th>X (R-L)</th>
+                    <th>Y (A-P)</th>
+                    <th>Z (I-S)</th>
+                </tr>
+                <tr>
+                    <th>At Cursor</th>
+                    <td id="xCoordCursor">N/A</td>
+                    <td id="yCoordCursor">N/A</td>
+                    <td id="zCoordCursor">N/A</td>
+                </tr>
+                <tr>
+                    <th>At Crosshair</th>
+                    <td id="xCoordCrosshair"><input type="number" id="xCoordInput" step="0.1"></td>
+                    <td id="yCoordCrosshair"><input type="number" id="yCoordInput" step="0.1"></td>
+                    <td id="zCoordCrosshair"><input type="number" id="zCoordInput" step="0.1"></td>
+                </tr>
+            </table>
+            <button id="goToCoordBtn">Go To Coordinate</button>
+        </div>
+        <div id="intensityPanel">
+            <h3>Intensity Values</h3>
+            <table id="intensityTable">
+                <tr>
+                    <th></th>
+                    <th>Main Image Intensity</th>
+                    <th>Overlay Image Intensity</th>
+                </tr>
+                <tr>
+                    <th>At Cursor</th>
+                    <td id="mainIntensityCursor">N/A</td>
+                    <td id="overlayIntensityCursor">N/A</td>
+                </tr>
+                <tr>
+                    <th>At Crosshair</th>
+                    <td id="mainIntensityCrosshair">N/A</td>
+                    <td id="overlayIntensityCrosshair">N/A</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    <div id="controls">
+        <h3>Main Image Controls</h3>
+        <label for="minValue">Min Value:</label>
+        <input type="range" id="minValue" min="0" max="1" step="0.01" value="0">
+        <input type="number" id="minValueInput" step="0.01">
+        <label for="maxValue">Max Value:</label>
+        <input type="range" id="maxValue" min="0" max="1" step="0.01" value="1">
+        <input type="number" id="maxValueInput" step="0.01">
+        <label for="colormap">Colormap:</label>
+        <select id="colormap">
+            <option value="grayscale">Grayscale</option>
+            <option value="hot">Hot</option>
+            <option value="jet">Jet</option>
+            <option value="viridis">Viridis</option>
+            <option value="plasma">Plasma</option>
+            <option value="magma">Magma</option>
+            <option value="inferno">Inferno</option>
+            <option value="cool">Cool</option>
+            <option value="spring">Spring</option>
+            <option value="summer">Summer</option>
+            <option value="autumn">Autumn</option>
+            <option value="winter">Winter</option>
+            <option value="bone">Bone</option>
+            <option value="copper">Copper</option>
+        </select>
+    </div>
+    <div id="overlayControls">
+        <h3>Overlay Image Controls</h3>
+        <label for="overlaySelect">Select Overlay:</label>
+        <select id="overlaySelect"></select>
+        <br>
+        <label for="overlayMinValue">Min Value:</label>
+        <input type="range" id="overlayMinValue" min="0" max="1" step="0.01" value="0">
+        <input type="number" id="overlayMinValueInput" step="0.01">
+        <label for="overlayMaxValue">Max Value:</label>
+        <input type="range" id="overlayMaxValue" min="0" max="1" step="0.01" value="1">
+        <input type="number" id="overlayMaxValueInput" step="0.01">
+        <label for="overlayTransparency">Transparency:</label>
+        <input type="range" id="overlayTransparency" min="0" max="1" step="0.01" value="0.5">
+        <label for="overlayColormap">Colormap:</label>
+        <select id="overlayColormap">
+            <option value="grayscale">Grayscale</option>
+            <option value="hot">Hot</option>
+            <option value="jet">Jet</option>
+            <option value="viridis">Viridis</option>
+            <option value="plasma">Plasma</option>
+            <option value="magma">Magma</option>
+            <option value="inferno">Inferno</option>
+            <option value="cool">Cool</option>
+            <option value="spring">Spring</option>
+            <option value="summer">Summer</option>
+            <option value="autumn">Autumn</option>
+            <option value="winter">Winter</option>
+            <option value="bone">Bone</option>
+            <option value="copper">Copper</option>
+        </select>
+    </div>
+    <script>
+        // Minimal NIFTI parser and other functions
+        // (All previous functions remain the same)
+        // Function to parse NIFTI header
+        function parseNIfTI(buffer) {
+            // [Function body remains the same]
+            var header = {};
+            header.buffer = buffer.slice(0, 348);
+            var dataView = new DataView(buffer, 0, 348);
+            var littleEndian = true;
+
+            var sizeof_hdr = dataView.getInt32(0, littleEndian);
+            if (sizeof_hdr !== 348) {
+                littleEndian = false;
+                sizeof_hdr = dataView.getInt32(0, littleEndian);
+                if (sizeof_hdr !== 348) {
+                    alert("Invalid NIFTI file!");
+                    return null;
+                }
+            }
+
+            header.littleEndian = littleEndian;
+            header.dim = [];
+            for (var i = 0; i < 8; i++) {
+                header.dim.push(dataView.getInt16(40 + i * 2, littleEndian));
+            }
+
+            header.datatype = dataView.getInt16(70, littleEndian);
+            header.bitpix = dataView.getInt16(72, littleEndian);
+
+            header.pixdim = [];
+            for (var i = 0; i < 8; i++) {
+                header.pixdim.push(dataView.getFloat32(76 + i * 4, littleEndian));
+            }
+
+            header.vox_offset = dataView.getFloat32(108, littleEndian);
+
+            header.scl_slope = dataView.getFloat32(112, littleEndian);
+            header.scl_inter = dataView.getFloat32(116, littleEndian);
+
+            header.qform_code = dataView.getInt16(252, littleEndian);
+            header.sform_code = dataView.getInt16(254, littleEndian);
+
+            return header;
+        }
+
+        // Function to parse image data from NIFTI file
+        function parseNIfTIImageData(buffer, header) {
+            // [Function body remains the same]
+            var dataType = header.datatype;
+            var littleEndian = header.littleEndian;
+            var dataOffset = Math.floor(header.vox_offset);
+            var dataView = new DataView(buffer);
+            var numVoxels = 1;
+            for (var i = 1; i <= header.dim[0]; i++) {
+                numVoxels *= header.dim[i];
+            }
+
+            var scl_slope = header.scl_slope;
+            var scl_inter = header.scl_inter;
+
+            if (!scl_slope || isNaN(scl_slope)) scl_slope = 1.0;
+            if (!scl_inter || isNaN(scl_inter)) scl_inter = 0.0;
+
+            var bytePerVoxel = header.bitpix / 8;
+
+            var imageData = new Float32Array(numVoxels);
+
+            for (var i = 0; i < numVoxels; i++) {
+                var value;
+                var offset = dataOffset + i * bytePerVoxel;
+                switch (dataType) {
+                    case 2: // DT_UINT8
+                        value = dataView.getUint8(offset);
+                        break;
+                    case 4: // DT_INT16
+                        value = dataView.getInt16(offset, littleEndian);
+                        break;
+                    case 8: // DT_INT32
+                        value = dataView.getInt32(offset, littleEndian);
+                        break;
+                    case 16: // DT_FLOAT32
+                        value = dataView.getFloat32(offset, littleEndian);
+                        break;
+                    case 64: // DT_FLOAT64
+                        value = dataView.getFloat64(offset, littleEndian);
+                        break;
+                    case 256: // DT_INT8
+                        value = dataView.getInt8(offset);
+                        break;
+                    case 512: // DT_UINT16
+                        value = dataView.getUint16(offset, littleEndian);
+                        break;
+                    case 768: // DT_UINT32
+                        value = dataView.getUint32(offset, littleEndian);
+                        break;
+                    default:
+                        alert("Unsupported NIFTI data type: " + dataType);
+                        return null;
+                }
+                value = value * scl_slope + scl_inter;
+                imageData[i] = value;
+            }
+
+            return imageData;
+        }
+
+        // Function to find min and max in large arrays
+        function findMinMax(dataArray) {
+            // [Function body remains the same]
+            var min = dataArray[0];
+            var max = dataArray[0];
+            for (var i = 1; i < dataArray.length; i++) {
+                var value = dataArray[i];
+                if (value < min) min = value;
+                if (value > max) max = value;
+            }
+            return { min: min, max: max };
+        }
+
+        // Function to parse the affine transformation matrix
+        function parseAffine(header) {
+            // [Function body remains the same]
+            var affine = [];
+            for (var i = 0; i < 4; i++) {
+                affine[i] = [];
+            }
+
+            var littleEndian = header.littleEndian;
+            var dataView = new DataView(header.buffer);
+
+            if (header.sform_code > 0) {
+                // Use sform affine matrix
+                affine[0][0] = dataView.getFloat32(280, littleEndian);
+                affine[0][1] = dataView.getFloat32(284, littleEndian);
+                affine[0][2] = dataView.getFloat32(288, littleEndian);
+                affine[0][3] = dataView.getFloat32(292, littleEndian);
+                affine[1][0] = dataView.getFloat32(296, littleEndian);
+                affine[1][1] = dataView.getFloat32(300, littleEndian);
+                affine[1][2] = dataView.getFloat32(304, littleEndian);
+                affine[1][3] = dataView.getFloat32(308, littleEndian);
+                affine[2][0] = dataView.getFloat32(312, littleEndian);
+                affine[2][1] = dataView.getFloat32(316, littleEndian);
+                affine[2][2] = dataView.getFloat32(320, littleEndian);
+                affine[2][3] = dataView.getFloat32(324, littleEndian);
+                affine[3][0] = 0;
+                affine[3][1] = 0;
+                affine[3][2] = 0;
+                affine[3][3] = 1;
+            } else if (header.qform_code > 0) {
+                // Compute qform affine matrix from quaternion
+                var b = dataView.getFloat32(256, littleEndian);
+                var c = dataView.getFloat32(260, littleEndian);
+                var d = dataView.getFloat32(264, littleEndian);
+                var a = Math.sqrt(1.0 - (b * b + c * c + d * d));
+                var qfac = header.pixdim[0]; // Should be -1 or 1
+
+                var pixdim1 = header.pixdim[1];
+                var pixdim2 = header.pixdim[2];
+                var pixdim3 = header.pixdim[3] * qfac;
+
+                affine[0][0] = (a * a + b * b - c * c - d * d) * pixdim1;
+                affine[0][1] = 2 * (b * c - a * d) * pixdim2;
+                affine[0][2] = 2 * (b * d + a * c) * pixdim3;
+                affine[0][3] = dataView.getFloat32(268, littleEndian); // qoffset_x
+                affine[1][0] = 2 * (b * c + a * d) * pixdim1;
+                affine[1][1] = (a * a + c * c - b * b - d * d) * pixdim2;
+                affine[1][2] = 2 * (c * d - a * b) * pixdim3;
+                affine[1][3] = dataView.getFloat32(272, littleEndian); // qoffset_y
+                affine[2][0] = 2 * (b * d - a * c) * pixdim1;
+                affine[2][1] = 2 * (c * d + a * b) * pixdim2;
+                affine[2][2] = (a * a + d * d - b * b - c * c) * pixdim3;
+                affine[2][3] = dataView.getFloat32(276, littleEndian); // qoffset_z
+                affine[3][0] = 0;
+                affine[3][1] = 0;
+                affine[3][2] = 0;
+                affine[3][3] = 1;
+            } else {
+                // Default to identity matrix
+                console.warn("Both sform_code and qform_code are zero. Using identity affine matrix.");
+                affine = [
+                    [1, 0, 0, 0],
+                    [0, 1, 0, 0],
+                    [0, 0, 1, 0],
+                    [0, 0, 0, 1]
+                ];
+            }
+
+            return affine;
+        }
+
+        // Function to invert a 3x3 matrix
+        function invert3x3Matrix(m) {
+            // [Function body remains the same]
+            var det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+                m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+                m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+
+            if (det === 0) {
+                console.error("Rotation matrix is singular and cannot be inverted.");
+                return null;
+            }
+
+            var invDet = 1 / det;
+
+            var inv = [
+                [
+                    (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * invDet,
+                    (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * invDet,
+                    (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * invDet
+                ],
+                [
+                    (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * invDet,
+                    (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * invDet,
+                    (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * invDet
+                ],
+                [
+                    (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * invDet,
+                    (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * invDet,
+                    (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * invDet
+                ]
+            ];
+
+            return inv;
+        }
+
+        // Function to invert an affine matrix
+        function invertAffineMatrix(affine) {
+            // [Function body remains the same]
+            var R = [
+                [affine[0][0], affine[0][1], affine[0][2]],
+                [affine[1][0], affine[1][1], affine[1][2]],
+                [affine[2][0], affine[2][1], affine[2][2]]
+            ];
+
+            var T = [affine[0][3], affine[1][3], affine[2][3]];
+
+            var R_inv = invert3x3Matrix(R);
+            if (!R_inv) {
+                alert("Affine rotation matrix is singular and cannot be inverted.");
+                return null;
+            }
+
+            var neg_R_inv_T = [
+                -(R_inv[0][0] * T[0] + R_inv[0][1] * T[1] + R_inv[0][2] * T[2]),
+                -(R_inv[1][0] * T[0] + R_inv[1][1] * T[1] + R_inv[1][2] * T[2]),
+                -(R_inv[2][0] * T[0] + R_inv[2][1] * T[1] + R_inv[2][2] * T[2])
+            ];
+
+            var affine_inv = [
+                [R_inv[0][0], R_inv[0][1], R_inv[0][2], neg_R_inv_T[0]],
+                [R_inv[1][0], R_inv[1][1], R_inv[1][2], neg_R_inv_T[1]],
+                [R_inv[2][0], R_inv[2][1], R_inv[2][2], neg_R_inv_T[2]],
+                [0, 0, 0, 1]
+            ];
+
+            return affine_inv;
+        }
+
+        function voxelToRAS(affine, i, j, k) {
+            // [Function body remains the same]
+            var x = affine[0][0] * i + affine[0][1] * j + affine[0][2] * k + affine[0][3];
+            var y = affine[1][0] * i + affine[1][1] * j + affine[1][2] * k + affine[1][3];
+            var z = affine[2][0] * i + affine[2][1] * j + affine[2][2] * k + affine[2][3];
+            return { x: x, y: y, z: z };
+        }
+
+        function RASToVoxel(affine, x, y, z) {
+            // [Function body remains the same]
+            var invAffine = invertAffineMatrix(affine);
+            if (!invAffine) {
+                alert("Failed to invert affine matrix.");
+                return null;
+            }
+
+            var i = invAffine[0][0] * x + invAffine[0][1] * y + invAffine[0][2] * z + invAffine[0][3];
+            var j = invAffine[1][0] * x + invAffine[1][1] * y + invAffine[1][2] * z + invAffine[1][3];
+            var k = invAffine[2][0] * x + invAffine[2][1] * y + invAffine[2][2] * z + invAffine[2][3];
+            return { i: i, j: j, k: k };
+        }
+
+        // Main script variables
+        var niftiHeader;
+        var niftiImageData;
+        var currentXIndex, currentYIndex, currentZIndex;
+        var dataRangeMin, dataRangeMax;
+        var minValue = 0, maxValue = 1;
+        var colormap = 'grayscale';
+        var affineMatrix;
+
+        // Overlays
+        var overlays = []; // Array to hold multiple overlays
+        var selectedOverlayIndex = -1; // Index of the currently selected overlay
+
+        // Event listeners and functions
+        document.getElementById('loadNiftiBtn').addEventListener('click', function () {
+            var fileInput = document.getElementById('niftiInput');
+            if (fileInput.files.length === 0) {
+                alert('Please select a NIFTI file.');
+                return;
+            }
+
+            var file = fileInput.files[0];
+
+            if (file.name.endsWith('.gz')) {
+                alert('Compressed NIFTI files (.nii.gz) are not supported in this version.');
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var buffer = e.target.result;
+                niftiHeader = parseNIfTI(buffer);
+                if (niftiHeader) {
+                    var imageData = parseNIfTIImageData(buffer, niftiHeader);
+                    if (imageData) {
+                        niftiImageData = imageData;
+                        var result = findMinMax(niftiImageData);
+                        dataRangeMin = result.min;
+                        dataRangeMax = result.max;
+
+                        // Update min and max value inputs and sliders
+                        document.getElementById('minValue').min = dataRangeMin;
+                        document.getElementById('minValue').max = dataRangeMax;
+                        document.getElementById('maxValue').min = dataRangeMin;
+                        document.getElementById('maxValue').max = dataRangeMax;
+                        document.getElementById('minValueInput').min = dataRangeMin;
+                        document.getElementById('minValueInput').max = dataRangeMax;
+                        document.getElementById('maxValueInput').min = dataRangeMin;
+                        document.getElementById('maxValueInput').max = dataRangeMax;
+
+                        document.getElementById('minValue').value = dataRangeMin;
+                        document.getElementById('maxValue').value = dataRangeMax;
+                        document.getElementById('minValueInput').value = dataRangeMin;
+                        document.getElementById('maxValueInput').value = dataRangeMax;
+
+                        initViewer(niftiHeader, niftiImageData);
+                    } else {
+                        console.error("Failed to parse image data.");
+                    }
+                } else {
+                    console.error("Failed to parse NIFTI header.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        document.getElementById('addOverlayBtn').addEventListener('click', function () {
+            var fileInput = document.getElementById('overlayInput');
+            if (fileInput.files.length === 0) {
+                alert('Please select a NIFTI overlay file.');
+                return;
+            }
+
+            var file = fileInput.files[0];
+
+            if (file.name.endsWith('.gz')) {
+                alert('Compressed NIFTI files (.nii.gz) are not supported in this version.');
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var buffer = e.target.result;
+                var overlayHeader = parseNIfTI(buffer);
+                if (overlayHeader) {
+                    var imageData = parseNIfTIImageData(buffer, overlayHeader);
+                    if (imageData) {
+                        var overlayResult = findMinMax(imageData);
+                        var overlayDataRangeMin = overlayResult.min;
+                        var overlayDataRangeMax = overlayResult.max;
+
+                        var overlay = {
+                            name: file.name,
+                            header: overlayHeader,
+                            imageData: imageData,
+                            dataRangeMin: overlayDataRangeMin,
+                            dataRangeMax: overlayDataRangeMax,
+                            minValue: overlayDataRangeMin,
+                            maxValue: overlayDataRangeMax,
+                            transparency: 0.5,
+                            colormap: 'grayscale'
+                        };
+
+                        overlays.push(overlay);
+                        selectedOverlayIndex = overlays.length - 1; // Select the most recently added overlay
+                        updateOverlayList();
+                        updateOverlayControls();
+                        updateAllSlices();
+                    } else {
+                        console.error("Failed to parse overlay image data.");
+                    }
+                } else {
+                    console.error("Failed to parse overlay NIFTI header.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Event listener for Reset Overlays button
+        document.getElementById('resetOverlayBtn').addEventListener('click', function () {
+            overlays = [];
+            selectedOverlayIndex = -1;
+            updateOverlayList();
+            updateOverlayControls();
+            updateAllSlices();
+            displayIntensityValuesAtCrosshair();
+        });
+
+        // Synchronize sliders and input boxes for main image controls
+        function syncMainImageControls() {
+            minValue = parseFloat(document.getElementById('minValue').value);
+            maxValue = parseFloat(document.getElementById('maxValue').value);
+            document.getElementById('minValueInput').value = minValue;
+            document.getElementById('maxValueInput').value = maxValue;
+            updateAllSlices();
+        }
+
+        function syncMainImageInputs() {
+            minValue = parseFloat(document.getElementById('minValueInput').value);
+            maxValue = parseFloat(document.getElementById('maxValueInput').value);
+            document.getElementById('minValue').value = minValue;
+            document.getElementById('maxValue').value = maxValue;
+            updateAllSlices();
+        }
+
+        document.getElementById('minValue').addEventListener('input', syncMainImageControls);
+        document.getElementById('maxValue').addEventListener('input', syncMainImageControls);
+        document.getElementById('minValueInput').addEventListener('input', syncMainImageInputs);
+        document.getElementById('maxValueInput').addEventListener('input', syncMainImageInputs);
+
+        document.getElementById('colormap').addEventListener('change', function () {
+            colormap = this.value;
+            updateAllSlices();
+        });
+
+        // Overlay selection
+        document.getElementById('overlaySelect').addEventListener('change', function () {
+            selectedOverlayIndex = parseInt(this.value);
+            updateOverlayControls();
+            updateAllSlices();
+        });
+
+        // Synchronize sliders and input boxes for overlay image controls
+        function syncOverlayControls() {
+            if (selectedOverlayIndex >= 0) {
+                var overlay = overlays[selectedOverlayIndex];
+                overlay.minValue = parseFloat(document.getElementById('overlayMinValue').value);
+                overlay.maxValue = parseFloat(document.getElementById('overlayMaxValue').value);
+                document.getElementById('overlayMinValueInput').value = overlay.minValue;
+                document.getElementById('overlayMaxValueInput').value = overlay.maxValue;
+                overlay.transparency = parseFloat(document.getElementById('overlayTransparency').value);
+                overlay.colormap = document.getElementById('overlayColormap').value;
+                updateAllSlices();
+            }
+        }
+
+        function syncOverlayInputs() {
+            if (selectedOverlayIndex >= 0) {
+                var overlay = overlays[selectedOverlayIndex];
+                overlay.minValue = parseFloat(document.getElementById('overlayMinValueInput').value);
+                overlay.maxValue = parseFloat(document.getElementById('overlayMaxValueInput').value);
+                document.getElementById('overlayMinValue').value = overlay.minValue;
+                document.getElementById('overlayMaxValue').value = overlay.maxValue;
+                overlay.transparency = parseFloat(document.getElementById('overlayTransparency').value);
+                overlay.colormap = document.getElementById('overlayColormap').value;
+                updateAllSlices();
+            }
+        }
+
+        document.getElementById('overlayMinValue').addEventListener('input', syncOverlayControls);
+        document.getElementById('overlayMaxValue').addEventListener('input', syncOverlayControls);
+        document.getElementById('overlayMinValueInput').addEventListener('input', syncOverlayInputs);
+        document.getElementById('overlayMaxValueInput').addEventListener('input', syncOverlayInputs);
+        document.getElementById('overlayTransparency').addEventListener('input', syncOverlayControls);
+        document.getElementById('overlayColormap').addEventListener('change', syncOverlayControls);
+
+        function initViewer(header, imageData) {
+            console.log("Initializing viewer with header:", header);
+            niftiHeader = header;
+            niftiImageData = imageData;
+
+            var nx = header.dim[1];
+            var ny = header.dim[2];
+            var nz = header.dim[3];
+
+            currentXIndex = Math.floor(nx / 2);
+            currentYIndex = Math.floor(ny / 2);
+            currentZIndex = Math.floor(nz / 2);
+
+            // Parse affine matrix
+            affineMatrix = parseAffine(header);
+            if (!affineMatrix) {
+                alert("Failed to parse affine matrix.");
+                return;
+            }
+            console.log("Affine Matrix:", affineMatrix);
+
+            displayAxialSlice(currentZIndex);
+            displayCoronalSlice(currentYIndex);
+            displaySagittalSlice(currentXIndex);
+
+            // Update RAS coordinate inputs
+            updateRASCoordinates();
+            displayRASCoordinatesAtCrosshair();
+            displayIntensityValuesAtCrosshair();
+
+            // Add mousemove event listeners to update RAS coordinates and intensity values
+            document.getElementById('axialView').addEventListener('mousemove', function (e) {
+                var rect = this.getBoundingClientRect();
+                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+                var i = x;
+                var j = y;
+                var k = currentZIndex;
+                var ras = voxelToRAS(affineMatrix, i, j, k);
+                displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
+                displayIntensityValuesAtCursor(i, j, k);
+            });
+
+            document.getElementById('coronalView').addEventListener('mousemove', function (e) {
+                var rect = this.getBoundingClientRect();
+                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+                var i = x;
+                var j = currentYIndex;
+                var k = y;
+                var ras = voxelToRAS(affineMatrix, i, j, k);
+                displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
+                displayIntensityValuesAtCursor(i, j, k);
+            });
+
+            // Adjusted the event listener for sagittalView
+            document.getElementById('sagittalView').addEventListener('mousemove', function (e) {
+                var rect = this.getBoundingClientRect();
+                var canvasX = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+                var canvasY = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+                var i = currentXIndex;
+                var j = canvasY;
+                var k = canvasX;
+                var ras = voxelToRAS(affineMatrix, i, j, k);
+                displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
+                displayIntensityValuesAtCursor(i, j, k);
+            });
+
+            document.getElementById('axialView').addEventListener('mousedown', function (e) {
+                var rect = this.getBoundingClientRect();
+                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+                updateSlices(x, y, null);
+            });
+
+            document.getElementById('coronalView').addEventListener('mousedown', function (e) {
+                var rect = this.getBoundingClientRect();
+                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+                updateSlices(x, null, y);
+            });
+
+            // Adjusted the event listener for sagittalView
+            document.getElementById('sagittalView').addEventListener('mousedown', function (e) {
+                var rect = this.getBoundingClientRect();
+                var canvasX = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+                var canvasY = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+                updateSlices(null, canvasY, canvasX);
+            });
+        }
+
+        function updateRASCoordinates() {
+            var ras = voxelToRAS(affineMatrix, currentXIndex, currentYIndex, currentZIndex);
+            // Update the input fields with the crosshair coordinates
+            document.getElementById('xCoordInput').value = ras.x.toFixed(2);
+            document.getElementById('yCoordInput').value = ras.y.toFixed(2);
+            document.getElementById('zCoordInput').value = ras.z.toFixed(2);
+        }
+
+        // Function to display RAS coordinates at cursor
+        function displayRASCoordinatesAtCursor(x, y, z) {
+            document.getElementById('xCoordCursor').innerText = x.toFixed(2);
+            document.getElementById('yCoordCursor').innerText = y.toFixed(2);
+            document.getElementById('zCoordCursor').innerText = z.toFixed(2);
+        }
+
+        // Function to display RAS coordinates at crosshair
+        function displayRASCoordinatesAtCrosshair() {
+            var ras = voxelToRAS(affineMatrix, currentXIndex, currentYIndex, currentZIndex);
+            document.getElementById('xCoordInput').value = ras.x.toFixed(2);
+            document.getElementById('yCoordInput').value = ras.y.toFixed(2);
+            document.getElementById('zCoordInput').value = ras.z.toFixed(2);
+        }
+
+        // Event listener for "Go To Coordinate" button
+        document.getElementById('goToCoordBtn').addEventListener('click', function () {
+            var x = parseFloat(document.getElementById('xCoordInput').value);
+            var y = parseFloat(document.getElementById('yCoordInput').value);
+            var z = parseFloat(document.getElementById('zCoordInput').value);
+            var voxel = RASToVoxel(affineMatrix, x, y, z);
+
+            if (!voxel) {
+                console.error("Invalid voxel coordinates.");
+                return;
+            }
+
+            var nx = niftiHeader.dim[1];
+            var ny = niftiHeader.dim[2];
+            var nz = niftiHeader.dim[3];
+
+            currentXIndex = Math.round(Math.max(0, Math.min(voxel.i, nx - 1)));
+            currentYIndex = Math.round(Math.max(0, Math.min(voxel.j, ny - 1)));
+            currentZIndex = Math.round(Math.max(0, Math.min(voxel.k, nz - 1)));
+
+            updateAllSlices();
+            updateRASCoordinates();
+            displayRASCoordinatesAtCrosshair();
+            displayIntensityValuesAtCrosshair();
+        });
+
+        function updateSlices(x, y, z) {
+            var header = niftiHeader;
+            var nx = header.dim[1];
+            var ny = header.dim[2];
+            var nz = header.dim[3];
+
+            if (x !== null) {
+                currentXIndex = Math.max(0, Math.min(x, nx - 1));
+            }
+            if (y !== null) {
+                currentYIndex = Math.max(0, Math.min(y, ny - 1));
+            }
+            if (z !== null) {
+                currentZIndex = Math.max(0, Math.min(z, nz - 1));
+            }
+
+            displayAxialSlice(currentZIndex);
+            displayCoronalSlice(currentYIndex);
+            displaySagittalSlice(currentXIndex);
+            updateRASCoordinates();
+            displayRASCoordinatesAtCrosshair();
+            displayIntensityValuesAtCrosshair();
+        }
+
+        function updateAllSlices() {
+            displayAxialSlice(currentZIndex);
+            displayCoronalSlice(currentYIndex);
+            displaySagittalSlice(currentXIndex);
+            displayIntensityValuesAtCrosshair();
+        }
+
+        function displayAxialSlice(zIndex) {
+            var header = niftiHeader;
+            var imageData = niftiImageData;
+            var nx = header.dim[1];
+            var ny = header.dim[2];
+
+            var sliceData = new Float32Array(nx * ny);
+
+            for (var y = 0; y < ny; y++) {
+                for (var x = 0; x < nx; x++) {
+                    var index = x + y * nx + zIndex * nx * ny;
+                    sliceData[x + y * nx] = imageData[index];
+                }
+            }
+
+            var canvas = document.getElementById('axialView'); // Adjusted to match swapped titles
+            renderSlice(sliceData, nx, ny, canvas, 'axial');
+        }
+
+        function displayCoronalSlice(yIndex) {
+            var header = niftiHeader;
+            var imageData = niftiImageData;
+            var nx = header.dim[1];
+            var nz = header.dim[3];
+            var ny = header.dim[2];
+
+            var sliceData = new Float32Array(nx * nz);
+
+            for (var z = 0; z < nz; z++) {
+                for (var x = 0; x < nx; x++) {
+                    var index = x + yIndex * nx + z * nx * ny;
+                    sliceData[x + z * nx] = imageData[index];
+                }
+            }
+
+            var canvas = document.getElementById('coronalView'); // Adjusted to match swapped titles
+            renderSlice(sliceData, nx, nz, canvas, 'coronal');
+        }
+
+        // Modified displaySagittalSlice function to swap x and y axes
+        function displaySagittalSlice(xIndex) {
+            var header = niftiHeader;
+            var imageData = niftiImageData;
+            var ny = header.dim[2];
+            var nz = header.dim[3];
+            var nx = header.dim[1];
+
+            var sliceData = new Float32Array(nz * ny);
+
+            for (var y = 0; y < ny; y++) {
+                for (var z = 0; z < nz; z++) {
+                    var index = xIndex + y * nx + z * nx * ny;
+                    sliceData[z + y * nz] = imageData[index];
+                }
+            }
+
+            var canvas = document.getElementById('sagittalView');
+            renderSlice(sliceData, nz, ny, canvas, 'sagittal');
+        }
+
+        // Modified renderSlice function
+        function renderSlice(sliceData, width, height, canvas, viewType) {
+            var ctx = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
+            var imageDataCanvas = ctx.createImageData(width, height);
+            var dataCanvas = imageDataCanvas.data;
+
+            for (var i = 0; i < sliceData.length; i++) {
+                var mainValue = sliceData[i];
+                var alpha = 255;
+
+                // Check if mainValue is outside min-max range
+                if (mainValue < minValue || mainValue > maxValue) {
+                    alpha = 0; // Fully transparent
+                } else {
+                    var value = (mainValue - minValue) / (maxValue - minValue);
+                    value = Math.max(0, Math.min(1, value));
+                    var color = getColorFromColormap(value, colormap);
+                }
+
+                // Initialize color if not set
+                if (!color) {
+                    color = { r: 0, g: 0, b: 0 };
+                }
+
+                dataCanvas[i * 4] = color.r;
+                dataCanvas[i * 4 + 1] = color.g;
+                dataCanvas[i * 4 + 2] = color.b;
+                dataCanvas[i * 4 + 3] = alpha;
+            }
+
+            // Create an off-screen canvas for compositing overlays
+            var offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = width;
+            offscreenCanvas.height = height;
+            var offscreenCtx = offscreenCanvas.getContext('2d');
+            offscreenCtx.putImageData(imageDataCanvas, 0, 0);
+
+            // Render each overlay
+            for (var overlayIndex = 0; overlayIndex < overlays.length; overlayIndex++) {
+                var overlay = overlays[overlayIndex];
+                var overlaySliceData = getOverlaySliceData(overlay, viewType);
+                var overlayImageDataCanvas = ctx.createImageData(width, height);
+                var overlayDataCanvas = overlayImageDataCanvas.data;
+
+                for (var i = 0; i < overlaySliceData.length; i++) {
+                    var overlayRawValue = overlaySliceData[i];
+                    var alpha = 0;
+
+                    if (overlayRawValue !== 0) {
+                        // Check if overlay value is within overlay min-max range
+                        if (overlayRawValue >= overlay.minValue && overlayRawValue <= overlay.maxValue) {
+                            var overlayValue = (overlayRawValue - overlay.minValue) / (overlay.maxValue - overlay.minValue);
+                            overlayValue = Math.max(0, Math.min(1, overlayValue));
+                            var overlayColor = getColorFromColormap(overlayValue, overlay.colormap);
+                            alpha = Math.floor(overlay.transparency * 255);
+
+                            overlayDataCanvas[i * 4] = overlayColor.r;
+                            overlayDataCanvas[i * 4 + 1] = overlayColor.g;
+                            overlayDataCanvas[i * 4 + 2] = overlayColor.b;
+                            overlayDataCanvas[i * 4 + 3] = alpha;
+                        }
+                    }
+                }
+
+                // Draw the overlay onto the off-screen canvas
+                var overlayCanvas = document.createElement('canvas');
+                overlayCanvas.width = width;
+                overlayCanvas.height = height;
+                var overlayCtx = overlayCanvas.getContext('2d');
+                overlayCtx.putImageData(overlayImageDataCanvas, 0, 0);
+
+                offscreenCtx.drawImage(overlayCanvas, 0, 0);
+            }
+
+            // Draw the final composite image onto the main canvas
+            ctx.drawImage(offscreenCanvas, 0, 0);
+
+            // Draw crosshair
+            if (viewType === 'axial') {
+                drawCrosshair(canvas, currentXIndex, currentYIndex);
+            } else if (viewType === 'coronal') {
+                drawCrosshair(canvas, currentXIndex, currentZIndex);
+            } else if (viewType === 'sagittal') {
+                drawCrosshair(canvas, currentZIndex, currentYIndex);
+            }
+        }
+
+        // Function to get overlay slice data based on view type
+        function getOverlaySliceData(overlay, viewType) {
+            var header = overlay.header;
+            var imageData = overlay.imageData;
+            var nx = header.dim[1];
+            var ny = header.dim[2];
+            var nz = header.dim[3];
+            var sliceData;
+
+            if (viewType === 'axial') {
+                sliceData = new Float32Array(nx * ny);
+                var zIndex = currentZIndex;
+                for (var y = 0; y < ny; y++) {
+                    for (var x = 0; x < nx; x++) {
+                        var index = x + y * nx + zIndex * nx * ny;
+                        sliceData[x + y * nx] = imageData[index];
+                    }
+                }
+            } else if (viewType === 'coronal') {
+                sliceData = new Float32Array(nx * nz);
+                var yIndex = currentYIndex;
+                for (var z = 0; z < nz; z++) {
+                    for (var x = 0; x < nx; x++) {
+                        var index = x + yIndex * nx + z * nx * ny;
+                        sliceData[x + z * nx] = imageData[index];
+                    }
+                }
+            } else if (viewType === 'sagittal') {
+                sliceData = new Float32Array(nz * ny);
+                var xIndex = currentXIndex;
+                for (var y = 0; y < ny; y++) {
+                    for (var z = 0; z < nz; z++) {
+                        var index = xIndex + y * nx + z * nx * ny;
+                        sliceData[z + y * nz] = imageData[index];
+                    }
+                }
+            }
+
+            return sliceData;
+        }
+
+        function getColorFromColormap(value, colormapName) {
+            var color = { r: 0, g: 0, b: 0 };
+            if (colormapName === 'grayscale') {
+                var v = Math.floor(255 * value);
+                color = { r: v, g: v, b: v };
+            } else if (colormapName === 'hot') {
+                color = hotColormap(value);
+            } else if (colormapName === 'jet') {
+                color = jetColormap(value);
+            } else if (colormapName === 'viridis') {
+                color = viridisColormap(value);
+            } else if (colormapName === 'plasma') {
+                color = plasmaColormap(value);
+            } else if (colormapName === 'magma') {
+                color = magmaColormap(value);
+            } else if (colormapName === 'inferno') {
+                color = infernoColormap(value);
+            } else if (colormapName === 'cool') {
+                color = coolColormap(value);
+            } else if (colormapName === 'spring') {
+                color = springColormap(value);
+            } else if (colormapName === 'summer') {
+                color = summerColormap(value);
+            } else if (colormapName === 'autumn') {
+                color = autumnColormap(value);
+            } else if (colormapName === 'winter') {
+                color = winterColormap(value);
+            } else if (colormapName === 'bone') {
+                color = boneColormap(value);
+            } else if (colormapName === 'copper') {
+                color = copperColormap(value);
+            }
+            return color;
+        }
+
+        function hotColormap(value) {
+            var r = Math.min(1, 3 * value);
+            var g = Math.min(1, 3 * value - 1);
+            var b = Math.min(1, 3 * value - 2);
+
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function jetColormap(value) {
+            var r = Math.floor(255 * interpolate(value, [0.35, 0.66, 1.0], [0, 0, 1]));
+            var g = Math.floor(255 * interpolate(value, [0.0, 0.125, 0.375, 0.64, 0.91], [0, 0.5, 1, 0.5, 0]));
+            var b = Math.floor(255 * interpolate(value, [0.0, 0.34, 0.65], [1, 0, 0]));
+            return { r: r, g: g, b: b };
+        }
+
+        function viridisColormap(value) {
+            // Viridis colormap ranges from purple to yellow
+            var t = Math.max(0, Math.min(1, value));
+            var r = 68 + t * (253 - 68);
+            var g = 1 + t * (231 - 1);
+            var b = 84 + t * (37 - 84);
+            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+        }
+
+        function plasmaColormap(value) {
+            var t = Math.max(0, Math.min(1, value));
+            var r = 12 + t * (240 - 12);
+            var g = 7 + t * (249 - 7);
+            var b = 134 + t * (33 - 134);
+            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+        }
+
+        function magmaColormap(value) {
+            var t = Math.max(0, Math.min(1, value));
+            var r = 0 + t * (251 - 0);
+            var g = 0 + t * (252 - 0);
+            var b = 3 + t * (191 - 3);
+            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+        }
+
+        function infernoColormap(value) {
+            var t = Math.max(0, Math.min(1, value));
+            var r = 0 + t * (252 - 0);
+            var g = 0 + t * (255 - 0);
+            var b = 4 + t * (164 - 4);
+            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+        }
+
+        function coolColormap(value) {
+            var r = value;
+            var g = 1 - value;
+            var b = 1;
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function springColormap(value) {
+            var r = 1;
+            var g = value;
+            var b = 1 - value;
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function summerColormap(value) {
+            var r = value;
+            var g = 0.5 + 0.5 * value;
+            var b = 0.4;
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function autumnColormap(value) {
+            var r = 1;
+            var g = value;
+            var b = 0;
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function winterColormap(value) {
+            var r = 0;
+            var g = value;
+            var b = 1 - 0.5 * value;
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function boneColormap(value) {
+            var r = (0.892 * value) + 0.1;
+            var g = (0.892 * value) + 0.1;
+            var b = (0.785 * value) + 0.1;
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function copperColormap(value) {
+            var r = value;
+            var g = 0.7812 * value;
+            var b = 0.4975 * value;
+            return {
+                r: Math.floor(255 * r),
+                g: Math.floor(255 * g),
+                b: Math.floor(255 * b)
+            };
+        }
+
+        function interpolate(x, xArray, yArray) {
+            for (var i = 0; i < xArray.length - 1; i++) {
+                if (x >= xArray[i] && x <= xArray[i + 1]) {
+                    var t = (x - xArray[i]) / (xArray[i + 1] - xArray[i]);
+                    return yArray[i] + t * (yArray[i + 1] - yArray[i]);
+                }
+            }
+            return 0;
+        }
+
+        // Function to draw crosshair on the canvas
+        function drawCrosshair(canvas, xPos, yPos) {
+            var ctx = canvas.getContext('2d');
+            ctx.save();
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 1;
+
+            // Horizontal line
+            ctx.beginPath();
+            ctx.moveTo(0, yPos + 0.5);
+            ctx.lineTo(canvas.width, yPos + 0.5);
+            ctx.stroke();
+
+            // Vertical line
+            ctx.beginPath();
+            ctx.moveTo(xPos + 0.5, 0);
+            ctx.lineTo(xPos + 0.5, canvas.height);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // Function to display intensity values at cursor
+        function displayIntensityValuesAtCursor(i, j, k) {
+            var nx = niftiHeader.dim[1];
+            var ny = niftiHeader.dim[2];
+            var nz = niftiHeader.dim[3];
+
+            // Check if indices are within bounds
+            if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) {
+                document.getElementById('mainIntensityCursor').innerText = 'Out of bounds';
+                document.getElementById('overlayIntensityCursor').innerText = 'Out of bounds';
+                return;
+            }
+
+            var index = Math.round(i) + Math.round(j) * nx + Math.round(k) * nx * ny;
+            var mainIntensity = niftiImageData[index];
+            document.getElementById('mainIntensityCursor').innerText = mainIntensity.toFixed(2);
+
+            if (overlays.length > 0 && selectedOverlayIndex >= 0) {
+                var overlay = overlays[selectedOverlayIndex];
+                var overlayIntensity = overlay.imageData[index];
+                document.getElementById('overlayIntensityCursor').innerText = overlayIntensity.toFixed(2);
+            } else {
+                document.getElementById('overlayIntensityCursor').innerText = 'N/A';
+            }
+        }
+
+        // Function to display intensity values at crosshair position
+        function displayIntensityValuesAtCrosshair() {
+            var nx = niftiHeader.dim[1];
+            var ny = niftiHeader.dim[2];
+            var nz = niftiHeader.dim[3];
+
+            var i = currentXIndex;
+            var j = currentYIndex;
+            var k = currentZIndex;
+
+            // Check if indices are within bounds
+            if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) {
+                document.getElementById('mainIntensityCrosshair').innerText = 'Out of bounds';
+                document.getElementById('overlayIntensityCrosshair').innerText = 'Out of bounds';
+                return;
+            }
+
+            var index = i + j * nx + k * nx * ny;
+            var mainIntensity = niftiImageData[index];
+            document.getElementById('mainIntensityCrosshair').innerText = mainIntensity.toFixed(2);
+
+            if (overlays.length > 0 && selectedOverlayIndex >= 0) {
+                var overlay = overlays[selectedOverlayIndex];
+                var overlayIntensity = overlay.imageData[index];
+                document.getElementById('overlayIntensityCrosshair').innerText = overlayIntensity.toFixed(2);
+            } else {
+                document.getElementById('overlayIntensityCrosshair').innerText = 'N/A';
+            }
+        }
+
+        // Function to update the overlay select list
+        function updateOverlayList() {
+            var overlaySelect = document.getElementById('overlaySelect');
+            overlaySelect.innerHTML = '';
+            for (var i = 0; i < overlays.length; i++) {
+                var option = document.createElement('option');
+                option.value = i;
+                option.text = overlays[i].name;
+                overlaySelect.add(option);
+            }
+            if (overlays.length > 0) {
+                overlaySelect.value = selectedOverlayIndex;
+                overlaySelect.disabled = false;
+            } else {
+                overlaySelect.disabled = true;
+            }
+        }
+
+        // Function to update overlay controls to reflect selected overlay
+        function updateOverlayControls() {
+            if (selectedOverlayIndex >= 0) {
+                var overlay = overlays[selectedOverlayIndex];
+                // Update min and max value inputs and sliders
+                document.getElementById('overlayMinValue').min = overlay.dataRangeMin;
+                document.getElementById('overlayMinValue').max = overlay.dataRangeMax;
+                document.getElementById('overlayMaxValue').min = overlay.dataRangeMin;
+                document.getElementById('overlayMaxValue').max = overlay.dataRangeMax;
+                document.getElementById('overlayMinValueInput').min = overlay.dataRangeMin;
+                document.getElementById('overlayMinValueInput').max = overlay.dataRangeMax;
+                document.getElementById('overlayMaxValueInput').min = overlay.dataRangeMin;
+                document.getElementById('overlayMaxValueInput').max = overlay.dataRangeMax;
+
+                document.getElementById('overlayMinValue').value = overlay.minValue;
+                document.getElementById('overlayMaxValue').value = overlay.maxValue;
+                document.getElementById('overlayMinValueInput').value = overlay.minValue;
+                document.getElementById('overlayMaxValueInput').value = overlay.maxValue;
+
+                document.getElementById('overlayTransparency').value = overlay.transparency;
+                document.getElementById('overlayColormap').value = overlay.colormap;
+            } else {
+                // Disable controls if no overlay is selected
+                document.getElementById('overlayMinValue').value = 0;
+                document.getElementById('overlayMaxValue').value = 1;
+                document.getElementById('overlayMinValueInput').value = 0;
+                document.getElementById('overlayMaxValueInput').value = 1;
+                document.getElementById('overlayTransparency').value = 0.5;
+                document.getElementById('overlayColormap').value = 'grayscale';
+            }
+        }
+
+    </script>
+</body>
+</html>
+
