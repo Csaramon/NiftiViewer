@@ -32,7 +32,7 @@
         select {
             margin-right: 10px;
         }
-        input[type="number"] {
+        input[type="number"], input[type="text"] {
             width: 100px;
         }
         /* Styles for the coordinate table */
@@ -81,6 +81,39 @@
         #coordinatePanel table, #intensityPanel table {
             width: 100%;
         }
+        /* Styles for the labels panel */
+        #labelsPanel {
+            margin-top: 20px;
+        }
+        #labelsTable {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        #labelsTable th, #labelsTable td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        #labelsTable th {
+            background-color: #f2f2f2;
+            text-align: center;
+        }
+        #labelsTable td {
+            text-align: center;
+        }
+        .color-swatch {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            vertical-align: middle;
+            border: 1px solid #000;
+        }
+        .remove-label-btn {
+            background-color: #ff4d4d;
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -92,18 +125,23 @@
         <button id="addOverlayBtn">Add Overlay Image</button>
         <button id="resetOverlayBtn">Reset Overlays</button>
     </div>
+    <!-- Labeling Controls -->
+    <div id="labelingControls">
+        <label for="labelColor">Label Color:</label>
+        <input type="color" id="labelColor" value="#ff0000">
+        <label for="labelSize">Label Size:</label>
+        <input type="number" id="labelSize" min="1" max="20" value="3" step="1">
+        <button id="labelVoxelBtn">Label Voxel</button>
+    </div>
     <div id="viewer">
         <div class="view">
-            <h3>Sagittal View</h3>
             <canvas id="sagittalView"></canvas>
         </div>
-        <!-- Swapped the titles and canvas IDs for Coronal and Axial Views -->
+        <!-- Swapped the canvas IDs for Coronal and Axial Views -->
         <div class="view">
-            <h3>Axial View</h3>
             <canvas id="coronalView"></canvas>
         </div>
         <div class="view">
-            <h3>Coronal View</h3>
             <canvas id="axialView"></canvas>
         </div>
     </div>
@@ -211,9 +249,26 @@
             <option value="copper">Copper</option>
         </select>
     </div>
+    <!-- Labels Panel -->
+    <div id="labelsPanel">
+        <h3>Labels</h3>
+        <table id="labelsTable">
+            <tr>
+                <th>Index</th>
+                <th>X (R-L)</th>
+                <th>Y (A-P)</th>
+                <th>Z (I-S)</th>
+                <th>Color</th>
+                <th>Size</th>
+                <th>Action</th>
+            </tr>
+            <!-- Labels will be dynamically added here -->
+        </table>
+        <button id="exportLabelsBtn">Export Labels</button>
+    </div>
     <script>
-        // Minimal NIFTI parser and other functions
-        // (All previous functions remain the same)
+        // JavaScript code with updated labeling functionality
+
         // Function to parse NIFTI header
         function parseNIfTI(buffer) {
             // [Function body remains the same]
@@ -505,6 +560,9 @@
         var overlays = []; // Array to hold multiple overlays
         var selectedOverlayIndex = -1; // Index of the currently selected overlay
 
+        // Labels
+        var labels = []; // Array to store labeled voxels
+
         // Event listeners and functions
         document.getElementById('loadNiftiBtn').addEventListener('click', function () {
             var fileInput = document.getElementById('niftiInput');
@@ -620,738 +678,900 @@
             displayIntensityValuesAtCrosshair();
         });
 
-        // Synchronize sliders and input boxes for main image controls
-        function syncMainImageControls() {
-            minValue = parseFloat(document.getElementById('minValue').value);
-            maxValue = parseFloat(document.getElementById('maxValue').value);
-            document.getElementById('minValueInput').value = minValue;
-            document.getElementById('maxValueInput').value = maxValue;
-            updateAllSlices();
-        }
-
-        function syncMainImageInputs() {
-            minValue = parseFloat(document.getElementById('minValueInput').value);
-            maxValue = parseFloat(document.getElementById('maxValueInput').value);
-            document.getElementById('minValue').value = minValue;
-            document.getElementById('maxValue').value = maxValue;
-            updateAllSlices();
-        }
-
-        document.getElementById('minValue').addEventListener('input', syncMainImageControls);
-        document.getElementById('maxValue').addEventListener('input', syncMainImageControls);
-        document.getElementById('minValueInput').addEventListener('input', syncMainImageInputs);
-        document.getElementById('maxValueInput').addEventListener('input', syncMainImageInputs);
-
-        document.getElementById('colormap').addEventListener('change', function () {
-            colormap = this.value;
-            updateAllSlices();
+        // Labeling functionality
+        document.getElementById('labelVoxelBtn').addEventListener('click', function () {
+            addLabel();
         });
 
-        // Overlay selection
-        document.getElementById('overlaySelect').addEventListener('change', function () {
-            selectedOverlayIndex = parseInt(this.value);
-            updateOverlayControls();
-            updateAllSlices();
-        });
-
-        // Synchronize sliders and input boxes for overlay image controls
-        function syncOverlayControls() {
-            if (selectedOverlayIndex >= 0) {
-                var overlay = overlays[selectedOverlayIndex];
-                overlay.minValue = parseFloat(document.getElementById('overlayMinValue').value);
-                overlay.maxValue = parseFloat(document.getElementById('overlayMaxValue').value);
-                document.getElementById('overlayMinValueInput').value = overlay.minValue;
-                document.getElementById('overlayMaxValueInput').value = overlay.maxValue;
-                overlay.transparency = parseFloat(document.getElementById('overlayTransparency').value);
-                overlay.colormap = document.getElementById('overlayColormap').value;
-                updateAllSlices();
-            }
-        }
-
-        function syncOverlayInputs() {
-            if (selectedOverlayIndex >= 0) {
-                var overlay = overlays[selectedOverlayIndex];
-                overlay.minValue = parseFloat(document.getElementById('overlayMinValueInput').value);
-                overlay.maxValue = parseFloat(document.getElementById('overlayMaxValueInput').value);
-                document.getElementById('overlayMinValue').value = overlay.minValue;
-                document.getElementById('overlayMaxValue').value = overlay.maxValue;
-                overlay.transparency = parseFloat(document.getElementById('overlayTransparency').value);
-                overlay.colormap = document.getElementById('overlayColormap').value;
-                updateAllSlices();
-            }
-        }
-
-        document.getElementById('overlayMinValue').addEventListener('input', syncOverlayControls);
-        document.getElementById('overlayMaxValue').addEventListener('input', syncOverlayControls);
-        document.getElementById('overlayMinValueInput').addEventListener('input', syncOverlayInputs);
-        document.getElementById('overlayMaxValueInput').addEventListener('input', syncOverlayInputs);
-        document.getElementById('overlayTransparency').addEventListener('input', syncOverlayControls);
-        document.getElementById('overlayColormap').addEventListener('change', syncOverlayControls);
-
-        function initViewer(header, imageData) {
-            console.log("Initializing viewer with header:", header);
-            niftiHeader = header;
-            niftiImageData = imageData;
-
-            var nx = header.dim[1];
-            var ny = header.dim[2];
-            var nz = header.dim[3];
-
-            currentXIndex = Math.floor(nx / 2);
-            currentYIndex = Math.floor(ny / 2);
-            currentZIndex = Math.floor(nz / 2);
-
-            // Parse affine matrix
-            affineMatrix = parseAffine(header);
-            if (!affineMatrix) {
-                alert("Failed to parse affine matrix.");
-                return;
-            }
-            console.log("Affine Matrix:", affineMatrix);
-
-            displayAxialSlice(currentZIndex);
-            displayCoronalSlice(currentYIndex);
-            displaySagittalSlice(currentXIndex);
-
-            // Update RAS coordinate inputs
-            updateRASCoordinates();
-            displayRASCoordinatesAtCrosshair();
-            displayIntensityValuesAtCrosshair();
-
-            // Add mousemove event listeners to update RAS coordinates and intensity values
-            document.getElementById('axialView').addEventListener('mousemove', function (e) {
-                var rect = this.getBoundingClientRect();
-                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
-                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
-                var i = x;
-                var j = y;
-                var k = currentZIndex;
-                var ras = voxelToRAS(affineMatrix, i, j, k);
-                displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
-                displayIntensityValuesAtCursor(i, j, k);
-            });
-
-            document.getElementById('coronalView').addEventListener('mousemove', function (e) {
-                var rect = this.getBoundingClientRect();
-                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
-                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
-                var i = x;
-                var j = currentYIndex;
-                var k = y;
-                var ras = voxelToRAS(affineMatrix, i, j, k);
-                displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
-                displayIntensityValuesAtCursor(i, j, k);
-            });
-
-            // Adjusted the event listener for sagittalView
-            document.getElementById('sagittalView').addEventListener('mousemove', function (e) {
-                var rect = this.getBoundingClientRect();
-                var canvasX = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
-                var canvasY = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
-                var i = currentXIndex;
-                var j = canvasY;
-                var k = canvasX;
-                var ras = voxelToRAS(affineMatrix, i, j, k);
-                displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
-                displayIntensityValuesAtCursor(i, j, k);
-            });
-
-            document.getElementById('axialView').addEventListener('mousedown', function (e) {
-                var rect = this.getBoundingClientRect();
-                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
-                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
-                updateSlices(x, y, null);
-            });
-
-            document.getElementById('coronalView').addEventListener('mousedown', function (e) {
-                var rect = this.getBoundingClientRect();
-                var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
-                var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
-                updateSlices(x, null, y);
-            });
-
-            // Adjusted the event listener for sagittalView
-            document.getElementById('sagittalView').addEventListener('mousedown', function (e) {
-                var rect = this.getBoundingClientRect();
-                var canvasX = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
-                var canvasY = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
-                updateSlices(null, canvasY, canvasX);
-            });
-        }
-
-        function updateRASCoordinates() {
-            var ras = voxelToRAS(affineMatrix, currentXIndex, currentYIndex, currentZIndex);
-            // Update the input fields with the crosshair coordinates
-            document.getElementById('xCoordInput').value = ras.x.toFixed(2);
-            document.getElementById('yCoordInput').value = ras.y.toFixed(2);
-            document.getElementById('zCoordInput').value = ras.z.toFixed(2);
-        }
-
-        // Function to display RAS coordinates at cursor
-        function displayRASCoordinatesAtCursor(x, y, z) {
-            document.getElementById('xCoordCursor').innerText = x.toFixed(2);
-            document.getElementById('yCoordCursor').innerText = y.toFixed(2);
-            document.getElementById('zCoordCursor').innerText = z.toFixed(2);
-        }
-
-        // Function to display RAS coordinates at crosshair
-        function displayRASCoordinatesAtCrosshair() {
-            var ras = voxelToRAS(affineMatrix, currentXIndex, currentYIndex, currentZIndex);
-            document.getElementById('xCoordInput').value = ras.x.toFixed(2);
-            document.getElementById('yCoordInput').value = ras.y.toFixed(2);
-            document.getElementById('zCoordInput').value = ras.z.toFixed(2);
-        }
-
-        // Event listener for "Go To Coordinate" button
-        document.getElementById('goToCoordBtn').addEventListener('click', function () {
-            var x = parseFloat(document.getElementById('xCoordInput').value);
-            var y = parseFloat(document.getElementById('yCoordInput').value);
-            var z = parseFloat(document.getElementById('zCoordInput').value);
-            var voxel = RASToVoxel(affineMatrix, x, y, z);
-
-            if (!voxel) {
-                console.error("Invalid voxel coordinates.");
-                return;
-            }
-
-            var nx = niftiHeader.dim[1];
-            var ny = niftiHeader.dim[2];
-            var nz = niftiHeader.dim[3];
-
-            currentXIndex = Math.round(Math.max(0, Math.min(voxel.i, nx - 1)));
-            currentYIndex = Math.round(Math.max(0, Math.min(voxel.j, ny - 1)));
-            currentZIndex = Math.round(Math.max(0, Math.min(voxel.k, nz - 1)));
-
-            updateAllSlices();
-            updateRASCoordinates();
-            displayRASCoordinatesAtCrosshair();
-            displayIntensityValuesAtCrosshair();
-        });
-
-        function updateSlices(x, y, z) {
-            var header = niftiHeader;
-            var nx = header.dim[1];
-            var ny = header.dim[2];
-            var nz = header.dim[3];
-
-            if (x !== null) {
-                currentXIndex = Math.max(0, Math.min(x, nx - 1));
-            }
-            if (y !== null) {
-                currentYIndex = Math.max(0, Math.min(y, ny - 1));
-            }
-            if (z !== null) {
-                currentZIndex = Math.max(0, Math.min(z, nz - 1));
-            }
-
-            displayAxialSlice(currentZIndex);
-            displayCoronalSlice(currentYIndex);
-            displaySagittalSlice(currentXIndex);
-            updateRASCoordinates();
-            displayRASCoordinatesAtCrosshair();
-            displayIntensityValuesAtCrosshair();
-        }
-
-        function updateAllSlices() {
-            displayAxialSlice(currentZIndex);
-            displayCoronalSlice(currentYIndex);
-            displaySagittalSlice(currentXIndex);
-            displayIntensityValuesAtCrosshair();
-        }
-
-        function displayAxialSlice(zIndex) {
-            var header = niftiHeader;
-            var imageData = niftiImageData;
-            var nx = header.dim[1];
-            var ny = header.dim[2];
-
-            var sliceData = new Float32Array(nx * ny);
-
-            for (var y = 0; y < ny; y++) {
-                for (var x = 0; x < nx; x++) {
-                    var index = x + y * nx + zIndex * nx * ny;
-                    sliceData[x + y * nx] = imageData[index];
-                }
-            }
-
-            var canvas = document.getElementById('axialView'); // Adjusted to match swapped titles
-            renderSlice(sliceData, nx, ny, canvas, 'axial');
-        }
-
-        function displayCoronalSlice(yIndex) {
-            var header = niftiHeader;
-            var imageData = niftiImageData;
-            var nx = header.dim[1];
-            var nz = header.dim[3];
-            var ny = header.dim[2];
-
-            var sliceData = new Float32Array(nx * nz);
-
-            for (var z = 0; z < nz; z++) {
-                for (var x = 0; x < nx; x++) {
-                    var index = x + yIndex * nx + z * nx * ny;
-                    sliceData[x + z * nx] = imageData[index];
-                }
-            }
-
-            var canvas = document.getElementById('coronalView'); // Adjusted to match swapped titles
-            renderSlice(sliceData, nx, nz, canvas, 'coronal');
-        }
-
-        // Modified displaySagittalSlice function to swap x and y axes
-        function displaySagittalSlice(xIndex) {
-            var header = niftiHeader;
-            var imageData = niftiImageData;
-            var ny = header.dim[2];
-            var nz = header.dim[3];
-            var nx = header.dim[1];
-
-            var sliceData = new Float32Array(nz * ny);
-
-            for (var y = 0; y < ny; y++) {
-                for (var z = 0; z < nz; z++) {
-                    var index = xIndex + y * nx + z * nx * ny;
-                    sliceData[z + y * nz] = imageData[index];
-                }
-            }
-
-            var canvas = document.getElementById('sagittalView');
-            renderSlice(sliceData, nz, ny, canvas, 'sagittal');
-        }
-
-        // Modified renderSlice function
-        function renderSlice(sliceData, width, height, canvas, viewType) {
-            var ctx = canvas.getContext('2d');
-            canvas.width = width;
-            canvas.height = height;
-            var imageDataCanvas = ctx.createImageData(width, height);
-            var dataCanvas = imageDataCanvas.data;
-
-            for (var i = 0; i < sliceData.length; i++) {
-                var mainValue = sliceData[i];
-                var alpha = 255;
-
-                // Check if mainValue is outside min-max range
-                if (mainValue < minValue || mainValue > maxValue) {
-                    alpha = 0; // Fully transparent
-                } else {
-                    var value = (mainValue - minValue) / (maxValue - minValue);
-                    value = Math.max(0, Math.min(1, value));
-                    var color = getColorFromColormap(value, colormap);
-                }
-
-                // Initialize color if not set
-                if (!color) {
-                    color = { r: 0, g: 0, b: 0 };
-                }
-
-                dataCanvas[i * 4] = color.r;
-                dataCanvas[i * 4 + 1] = color.g;
-                dataCanvas[i * 4 + 2] = color.b;
-                dataCanvas[i * 4 + 3] = alpha;
-            }
-
-            // Create an off-screen canvas for compositing overlays
-            var offscreenCanvas = document.createElement('canvas');
-            offscreenCanvas.width = width;
-            offscreenCanvas.height = height;
-            var offscreenCtx = offscreenCanvas.getContext('2d');
-            offscreenCtx.putImageData(imageDataCanvas, 0, 0);
-
-            // Render each overlay
-            for (var overlayIndex = 0; overlayIndex < overlays.length; overlayIndex++) {
-                var overlay = overlays[overlayIndex];
-                var overlaySliceData = getOverlaySliceData(overlay, viewType);
-                var overlayImageDataCanvas = ctx.createImageData(width, height);
-                var overlayDataCanvas = overlayImageDataCanvas.data;
-
-                for (var i = 0; i < overlaySliceData.length; i++) {
-                    var overlayRawValue = overlaySliceData[i];
-                    var alpha = 0;
-
-                    if (overlayRawValue !== 0) {
-                        // Check if overlay value is within overlay min-max range
-                        if (overlayRawValue >= overlay.minValue && overlayRawValue <= overlay.maxValue) {
-                            var overlayValue = (overlayRawValue - overlay.minValue) / (overlay.maxValue - overlay.minValue);
-                            overlayValue = Math.max(0, Math.min(1, overlayValue));
-                            var overlayColor = getColorFromColormap(overlayValue, overlay.colormap);
-                            alpha = Math.floor(overlay.transparency * 255);
-
-                            overlayDataCanvas[i * 4] = overlayColor.r;
-                            overlayDataCanvas[i * 4 + 1] = overlayColor.g;
-                            overlayDataCanvas[i * 4 + 2] = overlayColor.b;
-                            overlayDataCanvas[i * 4 + 3] = alpha;
-                        }
-                    }
-                }
-
-                // Draw the overlay onto the off-screen canvas
-                var overlayCanvas = document.createElement('canvas');
-                overlayCanvas.width = width;
-                overlayCanvas.height = height;
-                var overlayCtx = overlayCanvas.getContext('2d');
-                overlayCtx.putImageData(overlayImageDataCanvas, 0, 0);
-
-                offscreenCtx.drawImage(overlayCanvas, 0, 0);
-            }
-
-            // Draw the final composite image onto the main canvas
-            ctx.drawImage(offscreenCanvas, 0, 0);
-
-            // Draw crosshair
-            if (viewType === 'axial') {
-                drawCrosshair(canvas, currentXIndex, currentYIndex);
-            } else if (viewType === 'coronal') {
-                drawCrosshair(canvas, currentXIndex, currentZIndex);
-            } else if (viewType === 'sagittal') {
-                drawCrosshair(canvas, currentZIndex, currentYIndex);
-            }
-        }
-
-        // Function to get overlay slice data based on view type
-        function getOverlaySliceData(overlay, viewType) {
-            var header = overlay.header;
-            var imageData = overlay.imageData;
-            var nx = header.dim[1];
-            var ny = header.dim[2];
-            var nz = header.dim[3];
-            var sliceData;
-
-            if (viewType === 'axial') {
-                sliceData = new Float32Array(nx * ny);
-                var zIndex = currentZIndex;
-                for (var y = 0; y < ny; y++) {
-                    for (var x = 0; x < nx; x++) {
-                        var index = x + y * nx + zIndex * nx * ny;
-                        sliceData[x + y * nx] = imageData[index];
-                    }
-                }
-            } else if (viewType === 'coronal') {
-                sliceData = new Float32Array(nx * nz);
-                var yIndex = currentYIndex;
-                for (var z = 0; z < nz; z++) {
-                    for (var x = 0; x < nx; x++) {
-                        var index = x + yIndex * nx + z * nx * ny;
-                        sliceData[x + z * nx] = imageData[index];
-                    }
-                }
-            } else if (viewType === 'sagittal') {
-                sliceData = new Float32Array(nz * ny);
-                var xIndex = currentXIndex;
-                for (var y = 0; y < ny; y++) {
-                    for (var z = 0; z < nz; z++) {
-                        var index = xIndex + y * nx + z * nx * ny;
-                        sliceData[z + y * nz] = imageData[index];
-                    }
-                }
-            }
-
-            return sliceData;
-        }
-
-        function getColorFromColormap(value, colormapName) {
-            var color = { r: 0, g: 0, b: 0 };
-            if (colormapName === 'grayscale') {
-                var v = Math.floor(255 * value);
-                color = { r: v, g: v, b: v };
-            } else if (colormapName === 'hot') {
-                color = hotColormap(value);
-            } else if (colormapName === 'jet') {
-                color = jetColormap(value);
-            } else if (colormapName === 'viridis') {
-                color = viridisColormap(value);
-            } else if (colormapName === 'plasma') {
-                color = plasmaColormap(value);
-            } else if (colormapName === 'magma') {
-                color = magmaColormap(value);
-            } else if (colormapName === 'inferno') {
-                color = infernoColormap(value);
-            } else if (colormapName === 'cool') {
-                color = coolColormap(value);
-            } else if (colormapName === 'spring') {
-                color = springColormap(value);
-            } else if (colormapName === 'summer') {
-                color = summerColormap(value);
-            } else if (colormapName === 'autumn') {
-                color = autumnColormap(value);
-            } else if (colormapName === 'winter') {
-                color = winterColormap(value);
-            } else if (colormapName === 'bone') {
-                color = boneColormap(value);
-            } else if (colormapName === 'copper') {
-                color = copperColormap(value);
-            }
-            return color;
-        }
-
-        function hotColormap(value) {
-            var r = Math.min(1, 3 * value);
-            var g = Math.min(1, 3 * value - 1);
-            var b = Math.min(1, 3 * value - 2);
-
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function jetColormap(value) {
-            var r = Math.floor(255 * interpolate(value, [0.35, 0.66, 1.0], [0, 0, 1]));
-            var g = Math.floor(255 * interpolate(value, [0.0, 0.125, 0.375, 0.64, 0.91], [0, 0.5, 1, 0.5, 0]));
-            var b = Math.floor(255 * interpolate(value, [0.0, 0.34, 0.65], [1, 0, 0]));
-            return { r: r, g: g, b: b };
-        }
-
-        function viridisColormap(value) {
-            // Viridis colormap ranges from purple to yellow
-            var t = Math.max(0, Math.min(1, value));
-            var r = 68 + t * (253 - 68);
-            var g = 1 + t * (231 - 1);
-            var b = 84 + t * (37 - 84);
-            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
-        }
-
-        function plasmaColormap(value) {
-            var t = Math.max(0, Math.min(1, value));
-            var r = 12 + t * (240 - 12);
-            var g = 7 + t * (249 - 7);
-            var b = 134 + t * (33 - 134);
-            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
-        }
-
-        function magmaColormap(value) {
-            var t = Math.max(0, Math.min(1, value));
-            var r = 0 + t * (251 - 0);
-            var g = 0 + t * (252 - 0);
-            var b = 3 + t * (191 - 3);
-            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
-        }
-
-        function infernoColormap(value) {
-            var t = Math.max(0, Math.min(1, value));
-            var r = 0 + t * (252 - 0);
-            var g = 0 + t * (255 - 0);
-            var b = 4 + t * (164 - 4);
-            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
-        }
-
-        function coolColormap(value) {
-            var r = value;
-            var g = 1 - value;
-            var b = 1;
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function springColormap(value) {
-            var r = 1;
-            var g = value;
-            var b = 1 - value;
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function summerColormap(value) {
-            var r = value;
-            var g = 0.5 + 0.5 * value;
-            var b = 0.4;
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function autumnColormap(value) {
-            var r = 1;
-            var g = value;
-            var b = 0;
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function winterColormap(value) {
-            var r = 0;
-            var g = value;
-            var b = 1 - 0.5 * value;
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function boneColormap(value) {
-            var r = (0.892 * value) + 0.1;
-            var g = (0.892 * value) + 0.1;
-            var b = (0.785 * value) + 0.1;
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function copperColormap(value) {
-            var r = value;
-            var g = 0.7812 * value;
-            var b = 0.4975 * value;
-            return {
-                r: Math.floor(255 * r),
-                g: Math.floor(255 * g),
-                b: Math.floor(255 * b)
-            };
-        }
-
-        function interpolate(x, xArray, yArray) {
-            for (var i = 0; i < xArray.length - 1; i++) {
-                if (x >= xArray[i] && x <= xArray[i + 1]) {
-                    var t = (x - xArray[i]) / (xArray[i + 1] - xArray[i]);
-                    return yArray[i] + t * (yArray[i + 1] - yArray[i]);
-                }
-            }
-            return 0;
-        }
-
-        // Function to draw crosshair on the canvas
-        function drawCrosshair(canvas, xPos, yPos) {
-            var ctx = canvas.getContext('2d');
-            ctx.save();
-            ctx.strokeStyle = 'red';
-            ctx.lineWidth = 1;
-
-            // Horizontal line
-            ctx.beginPath();
-            ctx.moveTo(0, yPos + 0.5);
-            ctx.lineTo(canvas.width, yPos + 0.5);
-            ctx.stroke();
-
-            // Vertical line
-            ctx.beginPath();
-            ctx.moveTo(xPos + 0.5, 0);
-            ctx.lineTo(xPos + 0.5, canvas.height);
-            ctx.stroke();
-
-            ctx.restore();
-        }
-
-        // Function to display intensity values at cursor
-        function displayIntensityValuesAtCursor(i, j, k) {
-            var nx = niftiHeader.dim[1];
-            var ny = niftiHeader.dim[2];
-            var nz = niftiHeader.dim[3];
-
-            // Check if indices are within bounds
-            if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) {
-                document.getElementById('mainIntensityCursor').innerText = 'Out of bounds';
-                document.getElementById('overlayIntensityCursor').innerText = 'Out of bounds';
-                return;
-            }
-
-            var index = Math.round(i) + Math.round(j) * nx + Math.round(k) * nx * ny;
-            var mainIntensity = niftiImageData[index];
-            document.getElementById('mainIntensityCursor').innerText = mainIntensity.toFixed(2);
-
-            if (overlays.length > 0 && selectedOverlayIndex >= 0) {
-                var overlay = overlays[selectedOverlayIndex];
-                var overlayIntensity = overlay.imageData[index];
-                document.getElementById('overlayIntensityCursor').innerText = overlayIntensity.toFixed(2);
-            } else {
-                document.getElementById('overlayIntensityCursor').innerText = 'N/A';
-            }
-        }
-
-        // Function to display intensity values at crosshair position
-        function displayIntensityValuesAtCrosshair() {
-            var nx = niftiHeader.dim[1];
-            var ny = niftiHeader.dim[2];
-            var nz = niftiHeader.dim[3];
-
+        function addLabel() {
+            var labelColor = document.getElementById('labelColor').value;
+            var labelSize = parseInt(document.getElementById('labelSize').value);
+            var labelIndex = "Label " + (labels.length + 1); // Default index
             var i = currentXIndex;
             var j = currentYIndex;
             var k = currentZIndex;
+            var ras = voxelToRAS(affineMatrix, i, j, k);
 
-            // Check if indices are within bounds
-            if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) {
-                document.getElementById('mainIntensityCrosshair').innerText = 'Out of bounds';
-                document.getElementById('overlayIntensityCrosshair').innerText = 'Out of bounds';
-                return;
-            }
+            var label = {
+                index: labelIndex,
+                i: i,
+                j: j,
+                k: k,
+                x: ras.x,
+                y: ras.y,
+                z: ras.z,
+                color: labelColor,
+                size: labelSize
+            };
 
-            var index = i + j * nx + k * nx * ny;
-            var mainIntensity = niftiImageData[index];
-            document.getElementById('mainIntensityCrosshair').innerText = mainIntensity.toFixed(2);
+            labels.push(label);
+            updateLabelsPanel();
+            updateAllSlices();
+        }
 
-            if (overlays.length > 0 && selectedOverlayIndex >= 0) {
-                var overlay = overlays[selectedOverlayIndex];
-                var overlayIntensity = overlay.imageData[index];
-                document.getElementById('overlayIntensityCrosshair').innerText = overlayIntensity.toFixed(2);
-            } else {
-                document.getElementById('overlayIntensityCrosshair').innerText = 'N/A';
+        function updateLabelsPanel() {
+            var labelsTable = document.getElementById('labelsTable');
+            // Clear existing labels
+            labelsTable.innerHTML = `
+            <tr>
+                <th>Index</th>
+                <th>X (R-L)</th>
+                <th>Y (A-P)</th>
+                <th>Z (I-S)</th>
+                <th>Color</th>
+                <th>Size</th>
+                <th>Action</th>
+            </tr>
+            `;
+            for (var i = 0; i < labels.length; i++) {
+                var label = labels[i];
+                var row = labelsTable.insertRow(-1);
+                var cellIndex = row.insertCell(0);
+                var cellX = row.insertCell(1);
+                var cellY = row.insertCell(2);
+                var cellZ = row.insertCell(3);
+                var cellColor = row.insertCell(4);
+                var cellSize = row.insertCell(5);
+                var cellAction = row.insertCell(6);
+
+                // Index input
+                var indexInput = document.createElement('input');
+                indexInput.type = 'text';
+                indexInput.value = label.index;
+                indexInput.style.width = '100px';
+                indexInput.addEventListener('change', (function (idx) {
+                    return function () {
+                        labels[idx].index = this.value;
+                    };
+                })(i));
+                cellIndex.appendChild(indexInput);
+
+                cellX.innerText = label.x.toFixed(2);
+                cellY.innerText = label.y.toFixed(2);
+                cellZ.innerText = label.z.toFixed(2);
+
+                // Color swatch
+                var colorSwatch = document.createElement('div');
+                colorSwatch.className = 'color-swatch';
+                colorSwatch.style.backgroundColor = label.color;
+                cellColor.appendChild(colorSwatch);
+
+                // Size input
+                var sizeInput = document.createElement('input');
+                sizeInput.type = 'number';
+                sizeInput.min = 1;
+                sizeInput.max = 20;
+                sizeInput.step = 1;
+                sizeInput.value = label.size;
+                sizeInput.style.width = '60px';
+                sizeInput.addEventListener('change', (function (idx) {
+                    return function () {
+                        labels[idx].size = parseInt(this.value);
+                        updateAllSlices();
+                    };
+                })(i));
+                cellSize.appendChild(sizeInput);
+
+                // Remove button
+                var removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-label-btn';
+                removeBtn.innerText = 'Remove';
+                removeBtn.addEventListener('click', (function (idx) {
+                    return function () {
+                        labels.splice(idx, 1);
+                        updateLabelsPanel();
+                        updateAllSlices();
+                    };
+                })(i));
+                cellAction.appendChild(removeBtn);
             }
         }
 
-        // Function to update the overlay select list
-        function updateOverlayList() {
-            var overlaySelect = document.getElementById('overlaySelect');
-            overlaySelect.innerHTML = '';
-            for (var i = 0; i < overlays.length; i++) {
-                var option = document.createElement('option');
-                option.value = i;
-                option.text = overlays[i].name;
-                overlaySelect.add(option);
+        // Export labels to CSV
+        document.getElementById('exportLabelsBtn').addEventListener('click', function () {
+            exportLabels();
+        });
+
+        function exportLabels() {
+            var csvContent = 'Index,X (R-L),Y (A-P),Z (I-S),Color,Size\n';
+            for (var i = 0; i < labels.length; i++) {
+                var label = labels[i];
+                csvContent += `${label.index},${label.x.toFixed(2)},${label.y.toFixed(2)},${label.z.toFixed(2)},${label.color},${label.size}\n`;
             }
-            if (overlays.length > 0) {
-                overlaySelect.value = selectedOverlayIndex;
-                overlaySelect.disabled = false;
-            } else {
-                overlaySelect.disabled = true;
+            var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            var url = URL.createObjectURL(blob);
+
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'labels.csv';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // The rest of the JavaScript code remains the same as in the previous version,
+        // ensuring all functionalities are included.
+	// Synchronize sliders and input boxes for main image controls
+function syncMainImageControls() {
+    minValue = parseFloat(document.getElementById('minValue').value);
+    maxValue = parseFloat(document.getElementById('maxValue').value);
+    document.getElementById('minValueInput').value = minValue;
+    document.getElementById('maxValueInput').value = maxValue;
+    updateAllSlices();
+}
+
+function syncMainImageInputs() {
+    minValue = parseFloat(document.getElementById('minValueInput').value);
+    maxValue = parseFloat(document.getElementById('maxValueInput').value);
+    document.getElementById('minValue').value = minValue;
+    document.getElementById('maxValue').value = maxValue;
+    updateAllSlices();
+}
+
+document.getElementById('minValue').addEventListener('input', syncMainImageControls);
+document.getElementById('maxValue').addEventListener('input', syncMainImageControls);
+document.getElementById('minValueInput').addEventListener('input', syncMainImageInputs);
+document.getElementById('maxValueInput').addEventListener('input', syncMainImageInputs);
+
+document.getElementById('colormap').addEventListener('change', function () {
+    colormap = this.value;
+    updateAllSlices();
+});
+
+// Overlay selection
+document.getElementById('overlaySelect').addEventListener('change', function () {
+    selectedOverlayIndex = parseInt(this.value);
+    updateOverlayControls();
+    updateAllSlices();
+});
+
+// Synchronize sliders and input boxes for overlay image controls
+function syncOverlayControls() {
+    if (selectedOverlayIndex >= 0) {
+        var overlay = overlays[selectedOverlayIndex];
+        overlay.minValue = parseFloat(document.getElementById('overlayMinValue').value);
+        overlay.maxValue = parseFloat(document.getElementById('overlayMaxValue').value);
+        document.getElementById('overlayMinValueInput').value = overlay.minValue;
+        document.getElementById('overlayMaxValueInput').value = overlay.maxValue;
+        overlay.transparency = parseFloat(document.getElementById('overlayTransparency').value);
+        overlay.colormap = document.getElementById('overlayColormap').value;
+        updateAllSlices();
+    }
+}
+
+function syncOverlayInputs() {
+    if (selectedOverlayIndex >= 0) {
+        var overlay = overlays[selectedOverlayIndex];
+        overlay.minValue = parseFloat(document.getElementById('overlayMinValueInput').value);
+        overlay.maxValue = parseFloat(document.getElementById('overlayMaxValueInput').value);
+        document.getElementById('overlayMinValue').value = overlay.minValue;
+        document.getElementById('overlayMaxValue').value = overlay.maxValue;
+        overlay.transparency = parseFloat(document.getElementById('overlayTransparency').value);
+        overlay.colormap = document.getElementById('overlayColormap').value;
+        updateAllSlices();
+    }
+}
+
+document.getElementById('overlayMinValue').addEventListener('input', syncOverlayControls);
+document.getElementById('overlayMaxValue').addEventListener('input', syncOverlayControls);
+document.getElementById('overlayMinValueInput').addEventListener('input', syncOverlayInputs);
+document.getElementById('overlayMaxValueInput').addEventListener('input', syncOverlayInputs);
+document.getElementById('overlayTransparency').addEventListener('input', syncOverlayControls);
+document.getElementById('overlayColormap').addEventListener('change', syncOverlayControls);
+
+function initViewer(header, imageData) {
+    console.log("Initializing viewer with header:", header);
+    niftiHeader = header;
+    niftiImageData = imageData;
+
+    var nx = header.dim[1];
+    var ny = header.dim[2];
+    var nz = header.dim[3];
+
+    currentXIndex = Math.floor(nx / 2);
+    currentYIndex = Math.floor(ny / 2);
+    currentZIndex = Math.floor(nz / 2);
+
+    // Parse affine matrix
+    affineMatrix = parseAffine(header);
+    if (!affineMatrix) {
+        alert("Failed to parse affine matrix.");
+        return;
+    }
+    console.log("Affine Matrix:", affineMatrix);
+
+    displayAxialSlice(currentZIndex);
+    displayCoronalSlice(currentYIndex);
+    displaySagittalSlice(currentXIndex);
+
+    // Update RAS coordinate inputs
+    updateRASCoordinates();
+    displayRASCoordinatesAtCrosshair();
+    displayIntensityValuesAtCrosshair();
+
+    // Add mousemove event listeners to update RAS coordinates and intensity values
+    document.getElementById('axialView').addEventListener('mousemove', function (e) {
+        var rect = this.getBoundingClientRect();
+        var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+        var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+        var i = x;
+        var j = y;
+        var k = currentZIndex;
+        var ras = voxelToRAS(affineMatrix, i, j, k);
+        displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
+        displayIntensityValuesAtCursor(i, j, k);
+    });
+
+    document.getElementById('coronalView').addEventListener('mousemove', function (e) {
+        var rect = this.getBoundingClientRect();
+        var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+        var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+        var i = x;
+        var j = currentYIndex;
+        var k = y;
+        var ras = voxelToRAS(affineMatrix, i, j, k);
+        displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
+        displayIntensityValuesAtCursor(i, j, k);
+    });
+
+    // Adjusted the event listener for sagittalView
+    document.getElementById('sagittalView').addEventListener('mousemove', function (e) {
+        var rect = this.getBoundingClientRect();
+        var canvasX = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+        var canvasY = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+        var i = currentXIndex;
+        var j = canvasY;
+        var k = canvasX;
+        var ras = voxelToRAS(affineMatrix, i, j, k);
+        displayRASCoordinatesAtCursor(ras.x, ras.y, ras.z);
+        displayIntensityValuesAtCursor(i, j, k);
+    });
+
+    document.getElementById('axialView').addEventListener('mousedown', function (e) {
+        var rect = this.getBoundingClientRect();
+        var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+        var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+        updateSlices(x, y, null);
+    });
+
+    document.getElementById('coronalView').addEventListener('mousedown', function (e) {
+        var rect = this.getBoundingClientRect();
+        var x = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+        var y = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+        updateSlices(x, null, y);
+    });
+
+    // Adjusted the event listener for sagittalView
+    document.getElementById('sagittalView').addEventListener('mousedown', function (e) {
+        var rect = this.getBoundingClientRect();
+        var canvasX = Math.floor((e.clientX - rect.left) * this.width / this.clientWidth);
+        var canvasY = Math.floor((e.clientY - rect.top) * this.height / this.clientHeight);
+        updateSlices(null, canvasY, canvasX);
+    });
+}
+
+function updateRASCoordinates() {
+    var ras = voxelToRAS(affineMatrix, currentXIndex, currentYIndex, currentZIndex);
+    // Update the input fields with the crosshair coordinates
+    document.getElementById('xCoordInput').value = ras.x.toFixed(2);
+    document.getElementById('yCoordInput').value = ras.y.toFixed(2);
+    document.getElementById('zCoordInput').value = ras.z.toFixed(2);
+}
+
+// Function to display RAS coordinates at cursor
+function displayRASCoordinatesAtCursor(x, y, z) {
+    document.getElementById('xCoordCursor').innerText = x.toFixed(2);
+    document.getElementById('yCoordCursor').innerText = y.toFixed(2);
+    document.getElementById('zCoordCursor').innerText = z.toFixed(2);
+}
+
+// Function to display RAS coordinates at crosshair
+function displayRASCoordinatesAtCrosshair() {
+    var ras = voxelToRAS(affineMatrix, currentXIndex, currentYIndex, currentZIndex);
+    document.getElementById('xCoordInput').value = ras.x.toFixed(2);
+    document.getElementById('yCoordInput').value = ras.y.toFixed(2);
+    document.getElementById('zCoordInput').value = ras.z.toFixed(2);
+}
+
+// Event listener for "Go To Coordinate" button
+document.getElementById('goToCoordBtn').addEventListener('click', function () {
+    var x = parseFloat(document.getElementById('xCoordInput').value);
+    var y = parseFloat(document.getElementById('yCoordInput').value);
+    var z = parseFloat(document.getElementById('zCoordInput').value);
+    var voxel = RASToVoxel(affineMatrix, x, y, z);
+
+    if (!voxel) {
+        console.error("Invalid voxel coordinates.");
+        return;
+    }
+
+    var nx = niftiHeader.dim[1];
+    var ny = niftiHeader.dim[2];
+    var nz = niftiHeader.dim[3];
+
+    currentXIndex = Math.round(Math.max(0, Math.min(voxel.i, nx - 1)));
+    currentYIndex = Math.round(Math.max(0, Math.min(voxel.j, ny - 1)));
+    currentZIndex = Math.round(Math.max(0, Math.min(voxel.k, nz - 1)));
+
+    updateAllSlices();
+    updateRASCoordinates();
+    displayRASCoordinatesAtCrosshair();
+    displayIntensityValuesAtCrosshair();
+});
+
+function updateSlices(x, y, z) {
+    var header = niftiHeader;
+    var nx = header.dim[1];
+    var ny = header.dim[2];
+    var nz = header.dim[3];
+
+    if (x !== null) {
+        currentXIndex = Math.max(0, Math.min(x, nx - 1));
+    }
+    if (y !== null) {
+        currentYIndex = Math.max(0, Math.min(y, ny - 1));
+    }
+    if (z !== null) {
+        currentZIndex = Math.max(0, Math.min(z, nz - 1));
+    }
+
+    displayAxialSlice(currentZIndex);
+    displayCoronalSlice(currentYIndex);
+    displaySagittalSlice(currentXIndex);
+    updateRASCoordinates();
+    displayRASCoordinatesAtCrosshair();
+    displayIntensityValuesAtCrosshair();
+}
+
+function updateAllSlices() {
+    displayAxialSlice(currentZIndex);
+    displayCoronalSlice(currentYIndex);
+    displaySagittalSlice(currentXIndex);
+    displayIntensityValuesAtCrosshair();
+}
+
+function displayAxialSlice(zIndex) {
+    var header = niftiHeader;
+    var imageData = niftiImageData;
+    var nx = header.dim[1];
+    var ny = header.dim[2];
+
+    var sliceData = new Float32Array(nx * ny);
+
+    for (var y = 0; y < ny; y++) {
+        for (var x = 0; x < nx; x++) {
+            var index = x + y * nx + zIndex * nx * ny;
+            sliceData[x + y * nx] = imageData[index];
+        }
+    }
+
+    var canvas = document.getElementById('axialView');
+    renderSlice(sliceData, nx, ny, canvas, 'axial');
+}
+
+function displayCoronalSlice(yIndex) {
+    var header = niftiHeader;
+    var imageData = niftiImageData;
+    var nx = header.dim[1];
+    var nz = header.dim[3];
+    var ny = header.dim[2];
+
+    var sliceData = new Float32Array(nx * nz);
+
+    for (var z = 0; z < nz; z++) {
+        for (var x = 0; x < nx; x++) {
+            var index = x + yIndex * nx + z * nx * ny;
+            sliceData[x + z * nx] = imageData[index];
+        }
+    }
+
+    var canvas = document.getElementById('coronalView');
+    renderSlice(sliceData, nx, nz, canvas, 'coronal');
+}
+
+function displaySagittalSlice(xIndex) {
+    var header = niftiHeader;
+    var imageData = niftiImageData;
+    var ny = header.dim[2];
+    var nz = header.dim[3];
+    var nx = header.dim[1];
+
+    var sliceData = new Float32Array(nz * ny);
+
+    for (var y = 0; y < ny; y++) {
+        for (var z = 0; z < nz; z++) {
+            var index = xIndex + y * nx + z * nx * ny;
+            sliceData[z + y * nz] = imageData[index];
+        }
+    }
+
+    var canvas = document.getElementById('sagittalView');
+    renderSlice(sliceData, nz, ny, canvas, 'sagittal');
+}
+
+function renderSlice(sliceData, width, height, canvas, viewType) {
+    var ctx = canvas.getContext('2d');
+    canvas.width = width;
+    canvas.height = height;
+    var imageDataCanvas = ctx.createImageData(width, height);
+    var dataCanvas = imageDataCanvas.data;
+
+    for (var i = 0; i < sliceData.length; i++) {
+        var mainValue = sliceData[i];
+        var alpha = 255;
+
+        // Check if mainValue is outside min-max range
+        if (mainValue < minValue || mainValue > maxValue) {
+            alpha = 0; // Fully transparent
+        } else {
+            var value = (mainValue - minValue) / (maxValue - minValue);
+            value = Math.max(0, Math.min(1, value));
+            var color = getColorFromColormap(value, colormap);
+        }
+
+        // Initialize color if not set
+        if (!color) {
+            color = { r: 0, g: 0, b: 0 };
+        }
+
+        dataCanvas[i * 4] = color.r;
+        dataCanvas[i * 4 + 1] = color.g;
+        dataCanvas[i * 4 + 2] = color.b;
+        dataCanvas[i * 4 + 3] = alpha;
+    }
+
+    // Create an off-screen canvas for compositing overlays
+    var offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = width;
+    offscreenCanvas.height = height;
+    var offscreenCtx = offscreenCanvas.getContext('2d');
+    offscreenCtx.putImageData(imageDataCanvas, 0, 0);
+
+    // Render each overlay
+    for (var overlayIndex = 0; overlayIndex < overlays.length; overlayIndex++) {
+        var overlay = overlays[overlayIndex];
+        var overlaySliceData = getOverlaySliceData(overlay, viewType);
+        var overlayImageDataCanvas = ctx.createImageData(width, height);
+        var overlayDataCanvas = overlayImageDataCanvas.data;
+
+        for (var i = 0; i < overlaySliceData.length; i++) {
+            var overlayRawValue = overlaySliceData[i];
+            var alpha = 0;
+
+            if (overlayRawValue !== 0) {
+                // Check if overlay value is within overlay min-max range
+                if (overlayRawValue >= overlay.minValue && overlayRawValue <= overlay.maxValue) {
+                    var overlayValue = (overlayRawValue - overlay.minValue) / (overlay.maxValue - overlay.minValue);
+                    overlayValue = Math.max(0, Math.min(1, overlayValue));
+                    var overlayColor = getColorFromColormap(overlayValue, overlay.colormap);
+                    alpha = Math.floor(overlay.transparency * 255);
+
+                    overlayDataCanvas[i * 4] = overlayColor.r;
+                    overlayDataCanvas[i * 4 + 1] = overlayColor.g;
+                    overlayDataCanvas[i * 4 + 2] = overlayColor.b;
+                    overlayDataCanvas[i * 4 + 3] = alpha;
+                }
             }
         }
 
-        // Function to update overlay controls to reflect selected overlay
-        function updateOverlayControls() {
-            if (selectedOverlayIndex >= 0) {
-                var overlay = overlays[selectedOverlayIndex];
-                // Update min and max value inputs and sliders
-                document.getElementById('overlayMinValue').min = overlay.dataRangeMin;
-                document.getElementById('overlayMinValue').max = overlay.dataRangeMax;
-                document.getElementById('overlayMaxValue').min = overlay.dataRangeMin;
-                document.getElementById('overlayMaxValue').max = overlay.dataRangeMax;
-                document.getElementById('overlayMinValueInput').min = overlay.dataRangeMin;
-                document.getElementById('overlayMinValueInput').max = overlay.dataRangeMax;
-                document.getElementById('overlayMaxValueInput').min = overlay.dataRangeMin;
-                document.getElementById('overlayMaxValueInput').max = overlay.dataRangeMax;
+        // Draw the overlay onto the off-screen canvas
+        var overlayCanvas = document.createElement('canvas');
+        overlayCanvas.width = width;
+        overlayCanvas.height = height;
+        var overlayCtx = overlayCanvas.getContext('2d');
+        overlayCtx.putImageData(overlayImageDataCanvas, 0, 0);
 
-                document.getElementById('overlayMinValue').value = overlay.minValue;
-                document.getElementById('overlayMaxValue').value = overlay.maxValue;
-                document.getElementById('overlayMinValueInput').value = overlay.minValue;
-                document.getElementById('overlayMaxValueInput').value = overlay.maxValue;
+        offscreenCtx.drawImage(overlayCanvas, 0, 0);
+    }
 
-                document.getElementById('overlayTransparency').value = overlay.transparency;
-                document.getElementById('overlayColormap').value = overlay.colormap;
-            } else {
-                // Disable controls if no overlay is selected
-                document.getElementById('overlayMinValue').value = 0;
-                document.getElementById('overlayMaxValue').value = 1;
-                document.getElementById('overlayMinValueInput').value = 0;
-                document.getElementById('overlayMaxValueInput').value = 1;
-                document.getElementById('overlayTransparency').value = 0.5;
-                document.getElementById('overlayColormap').value = 'grayscale';
+    // Draw the final composite image onto the main canvas
+    ctx.drawImage(offscreenCanvas, 0, 0);
+
+    // Draw labels
+    drawLabels(ctx, viewType);
+
+    // Draw crosshair
+    if (viewType === 'axial') {
+        drawCrosshair(canvas, currentXIndex, currentYIndex);
+    } else if (viewType === 'coronal') {
+        drawCrosshair(canvas, currentXIndex, currentZIndex);
+    } else if (viewType === 'sagittal') {
+        drawCrosshair(canvas, currentZIndex, currentYIndex);
+    }
+}
+
+function getOverlaySliceData(overlay, viewType) {
+    var header = overlay.header;
+    var imageData = overlay.imageData;
+    var nx = header.dim[1];
+    var ny = header.dim[2];
+    var nz = header.dim[3];
+    var sliceData;
+
+    if (viewType === 'axial') {
+        sliceData = new Float32Array(nx * ny);
+        var zIndex = currentZIndex;
+        for (var y = 0; y < ny; y++) {
+            for (var x = 0; x < nx; x++) {
+                var index = x + y * nx + zIndex * nx * ny;
+                sliceData[x + y * nx] = imageData[index];
             }
         }
+    } else if (viewType === 'coronal') {
+        sliceData = new Float32Array(nx * nz);
+        var yIndex = currentYIndex;
+        for (var z = 0; z < nz; z++) {
+            for (var x = 0; x < nx; x++) {
+                var index = x + yIndex * nx + z * nx * ny;
+                sliceData[x + z * nx] = imageData[index];
+            }
+        }
+    } else if (viewType === 'sagittal') {
+        sliceData = new Float32Array(nz * ny);
+        var xIndex = currentXIndex;
+        for (var y = 0; y < ny; y++) {
+            for (var z = 0; z < nz; z++) {
+                var index = xIndex + y * nx + z * nx * ny;
+                sliceData[z + y * nz] = imageData[index];
+            }
+        }
+    }
+
+    return sliceData;
+}
+
+function getColorFromColormap(value, colormapName) {
+    var color = { r: 0, g: 0, b: 0 };
+    if (colormapName === 'grayscale') {
+        var v = Math.floor(255 * value);
+        color = { r: v, g: v, b: v };
+    } else if (colormapName === 'hot') {
+        color = hotColormap(value);
+    } else if (colormapName === 'jet') {
+        color = jetColormap(value);
+    } else if (colormapName === 'viridis') {
+        color = viridisColormap(value);
+    } else if (colormapName === 'plasma') {
+        color = plasmaColormap(value);
+    } else if (colormapName === 'magma') {
+        color = magmaColormap(value);
+    } else if (colormapName === 'inferno') {
+        color = infernoColormap(value);
+    } else if (colormapName === 'cool') {
+        color = coolColormap(value);
+    } else if (colormapName === 'spring') {
+        color = springColormap(value);
+    } else if (colormapName === 'summer') {
+        color = summerColormap(value);
+    } else if (colormapName === 'autumn') {
+        color = autumnColormap(value);
+    } else if (colormapName === 'winter') {
+        color = winterColormap(value);
+    } else if (colormapName === 'bone') {
+        color = boneColormap(value);
+    } else if (colormapName === 'copper') {
+        color = copperColormap(value);
+    }
+    return color;
+}
+
+// Colormap functions
+function hotColormap(value) {
+    var r = Math.min(1, 3 * value);
+    var g = Math.min(1, 3 * value - 1);
+    var b = Math.min(1, 3 * value - 2);
+
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function jetColormap(value) {
+    var r = Math.floor(255 * interpolate(value, [0.35, 0.66, 1.0], [0, 0, 1]));
+    var g = Math.floor(255 * interpolate(value, [0.0, 0.125, 0.375, 0.64, 0.91], [0, 0.5, 1, 0.5, 0]));
+    var b = Math.floor(255 * interpolate(value, [0.0, 0.34, 0.65], [1, 0, 0]));
+    return { r: r, g: g, b: b };
+}
+
+function viridisColormap(value) {
+    var t = Math.max(0, Math.min(1, value));
+    var r = 68 + t * (253 - 68);
+    var g = 1 + t * (231 - 1);
+    var b = 84 + t * (37 - 84);
+    return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+}
+
+function plasmaColormap(value) {
+    var t = Math.max(0, Math.min(1, value));
+    var r = 12 + t * (240 - 12);
+    var g = 7 + t * (249 - 7);
+    var b = 134 + t * (33 - 134);
+    return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+}
+
+function magmaColormap(value) {
+    var t = Math.max(0, Math.min(1, value));
+    var r = 0 + t * (251 - 0);
+    var g = 0 + t * (252 - 0);
+    var b = 3 + t * (191 - 3);
+    return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+}
+
+function infernoColormap(value) {
+    var t = Math.max(0, Math.min(1, value));
+    var r = 0 + t * (252 - 0);
+    var g = 0 + t * (255 - 0);
+    var b = 4 + t * (164 - 4);
+    return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+}
+
+function coolColormap(value) {
+    var r = value;
+    var g = 1 - value;
+    var b = 1;
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function springColormap(value) {
+    var r = 1;
+    var g = value;
+    var b = 1 - value;
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function summerColormap(value) {
+    var r = value;
+    var g = 0.5 + 0.5 * value;
+    var b = 0.4;
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function autumnColormap(value) {
+    var r = 1;
+    var g = value;
+    var b = 0;
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function winterColormap(value) {
+    var r = 0;
+    var g = value;
+    var b = 1 - 0.5 * value;
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function boneColormap(value) {
+    var r = (0.892 * value) + 0.1;
+    var g = (0.892 * value) + 0.1;
+    var b = (0.785 * value) + 0.1;
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function copperColormap(value) {
+    var r = value;
+    var g = 0.7812 * value;
+    var b = 0.4975 * value;
+    return {
+        r: Math.floor(255 * r),
+        g: Math.floor(255 * g),
+        b: Math.floor(255 * b)
+    };
+}
+
+function interpolate(x, xArray, yArray) {
+    for (var i = 0; i < xArray.length - 1; i++) {
+        if (x >= xArray[i] && x <= xArray[i + 1]) {
+            var t = (x - xArray[i]) / (xArray[i + 1] - xArray[i]);
+            return yArray[i] + t * (yArray[i + 1] - yArray[i]);
+        }
+    }
+    return 0;
+}
+
+function drawCrosshair(canvas, xPos, yPos) {
+    var ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.strokeStyle = 'red';
+    ctx.lineWidth = 1;
+
+    // Horizontal line
+    ctx.beginPath();
+    ctx.moveTo(0, yPos + 0.5);
+    ctx.lineTo(canvas.width, yPos + 0.5);
+    ctx.stroke();
+
+    // Vertical line
+    ctx.beginPath();
+    ctx.moveTo(xPos + 0.5, 0);
+    ctx.lineTo(xPos + 0.5, canvas.height);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// Function to draw labels on the canvas
+function drawLabels(ctx, viewType) {
+    for (var i = 0; i < labels.length; i++) {
+        var label = labels[i];
+        var coords = getSliceCoordinates(label, viewType);
+        if (coords) {
+            ctx.save();
+            ctx.fillStyle = label.color;
+            ctx.beginPath();
+            ctx.arc(coords.x + 0.5, coords.y + 0.5, label.size, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+}
+
+// Function to get label coordinates on the slice
+function getSliceCoordinates(label, viewType) {
+    if (viewType === 'axial' && label.k === currentZIndex) {
+        return { x: label.i, y: label.j };
+    } else if (viewType === 'coronal' && label.j === currentYIndex) {
+        return { x: label.i, y: label.k };
+    } else if (viewType === 'sagittal' && label.i === currentXIndex) {
+        return { x: label.k, y: label.j };
+    } else {
+        return null;
+    }
+}
+
+// Function to display intensity values at cursor
+function displayIntensityValuesAtCursor(i, j, k) {
+    var nx = niftiHeader.dim[1];
+    var ny = niftiHeader.dim[2];
+    var nz = niftiHeader.dim[3];
+
+    // Check if indices are within bounds
+    if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) {
+        document.getElementById('mainIntensityCursor').innerText = 'Out of bounds';
+        document.getElementById('overlayIntensityCursor').innerText = 'Out of bounds';
+        return;
+    }
+
+    var index = Math.round(i) + Math.round(j) * nx + Math.round(k) * nx * ny;
+    var mainIntensity = niftiImageData[index];
+    document.getElementById('mainIntensityCursor').innerText = mainIntensity.toFixed(2);
+
+    if (overlays.length > 0 && selectedOverlayIndex >= 0) {
+        var overlay = overlays[selectedOverlayIndex];
+        var overlayIntensity = overlay.imageData[index];
+        document.getElementById('overlayIntensityCursor').innerText = overlayIntensity.toFixed(2);
+    } else {
+        document.getElementById('overlayIntensityCursor').innerText = 'N/A';
+    }
+}
+
+// Function to display intensity values at crosshair position
+function displayIntensityValuesAtCrosshair() {
+    var nx = niftiHeader.dim[1];
+    var ny = niftiHeader.dim[2];
+    var nz = niftiHeader.dim[3];
+
+    var i = currentXIndex;
+    var j = currentYIndex;
+    var k = currentZIndex;
+
+    // Check if indices are within bounds
+    if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) {
+        document.getElementById('mainIntensityCrosshair').innerText = 'Out of bounds';
+        document.getElementById('overlayIntensityCrosshair').innerText = 'Out of bounds';
+        return;
+    }
+
+    var index = i + j * nx + k * nx * ny;
+    var mainIntensity = niftiImageData[index];
+    document.getElementById('mainIntensityCrosshair').innerText = mainIntensity.toFixed(2);
+
+    if (overlays.length > 0 && selectedOverlayIndex >= 0) {
+        var overlay = overlays[selectedOverlayIndex];
+        var overlayIntensity = overlay.imageData[index];
+        document.getElementById('overlayIntensityCrosshair').innerText = overlayIntensity.toFixed(2);
+    } else {
+        document.getElementById('overlayIntensityCrosshair').innerText = 'N/A';
+    }
+}
+
+// Function to update the overlay select list
+function updateOverlayList() {
+    var overlaySelect = document.getElementById('overlaySelect');
+    overlaySelect.innerHTML = '';
+    for (var i = 0; i < overlays.length; i++) {
+        var option = document.createElement('option');
+        option.value = i;
+        option.text = overlays[i].name;
+        overlaySelect.add(option);
+    }
+    if (overlays.length > 0) {
+        overlaySelect.value = selectedOverlayIndex;
+        overlaySelect.disabled = false;
+    } else {
+        overlaySelect.disabled = true;
+    }
+}
+
+// Function to update overlay controls to reflect selected overlay
+function updateOverlayControls() {
+    if (selectedOverlayIndex >= 0) {
+        var overlay = overlays[selectedOverlayIndex];
+        // Update min and max value inputs and sliders
+        document.getElementById('overlayMinValue').min = overlay.dataRangeMin;
+        document.getElementById('overlayMinValue').max = overlay.dataRangeMax;
+        document.getElementById('overlayMaxValue').min = overlay.dataRangeMin;
+        document.getElementById('overlayMaxValue').max = overlay.dataRangeMax;
+        document.getElementById('overlayMinValueInput').min = overlay.dataRangeMin;
+        document.getElementById('overlayMinValueInput').max = overlay.dataRangeMax;
+        document.getElementById('overlayMaxValueInput').min = overlay.dataRangeMin;
+        document.getElementById('overlayMaxValueInput').max = overlay.dataRangeMax;
+
+        document.getElementById('overlayMinValue').value = overlay.minValue;
+        document.getElementById('overlayMaxValue').value = overlay.maxValue;
+        document.getElementById('overlayMinValueInput').value = overlay.minValue;
+        document.getElementById('overlayMaxValueInput').value = overlay.maxValue;
+
+        document.getElementById('overlayTransparency').value = overlay.transparency;
+        document.getElementById('overlayColormap').value = overlay.colormap;
+    } else {
+        // Disable controls if no overlay is selected
+        document.getElementById('overlayMinValue').value = 0;
+        document.getElementById('overlayMaxValue').value = 1;
+        document.getElementById('overlayMinValueInput').value = 0;
+        document.getElementById('overlayMaxValueInput').value = 1;
+        document.getElementById('overlayTransparency').value = 0.5;
+        document.getElementById('overlayColormap').value = 'grayscale';
+    }
+}
+
 
     </script>
 </body>
 </html>
-
